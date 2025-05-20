@@ -1,9 +1,8 @@
-name: QSFindItemAddOn
-version: ${project.version}
+name: PerchFindItem
+version: 1.0.0
 main: io.myzticbean.finditemaddon.FindItemAddOn
-website: https://modrinth.com/plugin/shop-search
 api-version: 1.20
-authors: [ myzticbean ]
+authors: [ KayaLambrex ]
 softdepend:
   - QuickShop
   - QuickShop-Hikari
@@ -38,3 +37,14 @@ permissions:
   finditem.shoptp.bypass-safetycheck:
     description: Bypass safe location check when teleporting to the shop
     default: false
+commands:
+  wheretobuy:
+    description: Find where to buy an item
+    usage: /wheretobuy <item/hand>
+    permission: finditemaddon.wtb
+    aliases: [wtb]
+  wheretosell:
+    description: Find where to sell an item
+    usage: /wheretosell <item/hand>
+    permission: finditemaddon.wts
+    aliases: [ wts ]

@@ -18,6 +18,7 @@
  */
 package io.myzticbean.finditemaddon;
 
+import io.myzticbean.finditemaddon.commands.WhereToBuyTabCompleter;
 import io.myzticbean.finditemaddon.commands.simpapi.BuySubCmd;
 import io.myzticbean.finditemaddon.commands.simpapi.HideShopSubCmd;
 import io.myzticbean.finditemaddon.commands.simpapi.ReloadSubCmd;
@@ -156,6 +157,13 @@ public final class FindItemAddOn extends JavaPlugin {
         ConfigSetup.copySampleConfig();
 
         initCommands();
+
+        // Register /wheretobuy command and tab completer
+        getCommand("wheretobuy").setExecutor(new io.myzticbean.finditemaddon.commands.WhereToBuyCommand());
+        getCommand("wheretobuy").setTabCompleter(new WhereToBuyTabCompleter());
+
+        getCommand("wheretosell").setExecutor(new io.myzticbean.finditemaddon.commands.WhereToSellCommand());
+        getCommand("wheretosell").setTabCompleter(new io.myzticbean.finditemaddon.commands.WhereToSellTabCompleter());
 
         // Run plugin startup logic after server is done loading
         Bukkit.getScheduler().scheduleSyncDelayedTask(FindItemAddOn.getInstance(), this::runPluginStartupTasks);
