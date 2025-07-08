@@ -1,6 +1,6 @@
-name: PerchFindItem
+name: PerchShopFinder
 version: 1.0.0
-main: io.myzticbean.finditemaddon.FindItemAddOn
+main: me.perch.shopfinder.FindItemAddOn
 api-version: 1.20
 authors: [ KayaLambrex ]
 softdepend:
@@ -9,8 +9,7 @@ softdepend:
   - PlayerWarps
   - WorldGuard
   - Essentials
-  - Residence
-  - BentoBox
+  - ProtocolLib
 
 permissions:
   finditem.use:
@@ -48,3 +47,14 @@ commands:
     usage: /wheretosell <item/hand>
     permission: finditemaddon.wts
     aliases: [ wts ]
+  outofstock:
+    description: Shows your out-of-stock shops
+    usage: /outofstock
+    permission: finditemaddon.oos
+    aliases: [ oos ]
+  excludewarp:
+    description: Exclude your warp from all wtb searches
+    usage: /excludewarp <warpname>
+  includewarp:
+    description: Include your warp in all wtb searches
+    usage: /includewarp <warpname>
