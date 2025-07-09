@@ -447,40 +447,37 @@ public class CmdExecutorHandler {
     // --- Fixed: Buy menu is now truly shuffled, not sorted by price/type ---
     public void openShopMenu(Player player, List<FoundShopItemModel> searchResultList, boolean synchronize, String errorMsg, String originCommand, boolean isBuying) {
         if (!searchResultList.isEmpty()) {
-            List<FoundShopItemModel> finalList;
-            if (isBuying) {
-                finalList = new ArrayList<>(searchResultList);
-                Collections.shuffle(finalList);
-            } else {
-                searchResultList.sort(
-                        Comparator.comparing((FoundShopItemModel shop) -> getPotionEffectSortKey(shop.getItemStack()))
-                                .thenComparing((FoundShopItemModel shop) -> {
-                                    ItemStack item = shop.getItemStack();
-                                    return item != null ? item.getType().name() : "";
-                                })
-                                .thenComparingDouble(FoundShopItemModel::getShopPrice)
-                );
-                Map<String, Map<Double, List<FoundShopItemModel>>> grouped =
-                        searchResultList.stream()
-                                .collect(Collectors.groupingBy(
-                                        shop -> {
-                                            ItemStack item = shop.getItemStack();
-                                            return item != null ? item.getType().name() : "";
-                                        },
-                                        TreeMap::new,
-                                        Collectors.groupingBy(
-                                                FoundShopItemModel::getShopPrice,
-                                                TreeMap::new,
-                                                Collectors.toList()
-                                        )
-                                ));
+            // --- Group by item type, then shuffle or sort as needed ---
+            Map<Material, List<FoundShopItemModel>> grouped = new HashMap<>();
+            for (FoundShopItemModel shop : searchResultList) {
+                ItemStack item = shop.getItemStack();
+                if (item != null) {
+                    grouped.computeIfAbsent(item.getType(), k -> new ArrayList<>()).add(shop);
+                }
+            }
 
-                finalList = new ArrayList<>();
-                for (Map<Double, List<FoundShopItemModel>> priceMap : grouped.values()) {
-                    for (List<FoundShopItemModel> group : priceMap.values()) {
-                        Collections.shuffle(group);
-                        finalList.addAll(group);
-                    }
+            List<FoundShopItemModel> finalList = new ArrayList<>();
+
+            if (isBuying) {
+                // Shuffle the groups (item types)
+                List<Material> types = new ArrayList<>(grouped.keySet());
+                Collections.shuffle(types);
+
+                for (Material type : types) {
+                    List<FoundShopItemModel> shops = grouped.get(type);
+                    Collections.shuffle(shops); // Shuffle within group
+                    finalList.addAll(shops);
+                }
+            } else {
+                // Sort the groups (item types)
+                List<Material> types = new ArrayList<>(grouped.keySet());
+                types.sort(Comparator.comparing(Enum::name)); // Alphabetical by type
+
+                for (Material type : types) {
+                    List<FoundShopItemModel> shops = grouped.get(type);
+                    // Sort within group, e.g. by price ascending
+                    shops.sort(Comparator.comparingDouble(FoundShopItemModel::getShopPrice));
+                    finalList.addAll(shops);
                 }
             }
 
