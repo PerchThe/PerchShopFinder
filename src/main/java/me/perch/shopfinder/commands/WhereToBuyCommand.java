@@ -253,7 +253,7 @@ public class WhereToBuyCommand implements CommandExecutor {
             player.performCommand("wtbmenu");
         } else {
             if (isBuying) {
-                cmdExecutor.openShopMenu(player, result.allResults, false, FindItemAddOn.getConfigProvider().NO_SHOP_FOUND_MSG, "wtbmenu");
+                cmdExecutor.openShopMenu(player, result.allResults, false, FindItemAddOn.getConfigProvider().NO_SHOP_FOUND_MSG, "wtbmenu", true);
             } else {
                 cmdExecutor.openShopMenuDescending(player, result.allResults, false, FindItemAddOn.getConfigProvider().NO_SHOP_FOUND_MSG, "wtsmenu");
             }

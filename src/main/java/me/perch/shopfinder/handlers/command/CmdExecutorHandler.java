@@ -38,7 +38,6 @@ public class CmdExecutorHandler {
         if (item == null) return "";
         if (!(item.getItemMeta() instanceof PotionMeta meta)) return "";
         List<String> effects = new ArrayList<>();
-        // Add base effect if present
         try {
             if (meta.getBasePotionData() != null && meta.getBasePotionData().getType() != null) {
                 PotionEffectType effect = meta.getBasePotionData().getType().getEffectType();
@@ -47,13 +46,12 @@ public class CmdExecutorHandler {
                 }
             }
         } catch (Throwable ignored) {}
-        // Add custom effects
         if (meta.hasCustomEffects()) {
             for (var custom : meta.getCustomEffects()) {
                 effects.add(custom.getType().getName() + ":" + custom.getAmplifier());
             }
         }
-        Collections.sort(effects); // So sorting is consistent
+        Collections.sort(effects);
         return String.join(";", effects);
     }
 
@@ -104,6 +102,28 @@ public class CmdExecutorHandler {
                 Bukkit.getScheduler().runTaskAsynchronously(FindItemAddOn.getInstance(), () -> {
                     List<FoundShopItemModel> searchResultList = FindItemAddOn.getQsApiInstance().fetchAllItemsFromAllShops(isBuying, player);
                     sortShopsByNearbyWarp(searchResultList, player);
+                    if (isBuying) {
+                        Collections.shuffle(searchResultList);
+                        this.openShopMenu(player, searchResultList, true, FindItemAddOn.getConfigProvider().NO_SHOP_FOUND_MSG, originCommand, true);
+                    } else {
+                        searchResultList.sort(
+                                Comparator.comparing((FoundShopItemModel shop) -> getPotionEffectSortKey(shop.getItemStack()))
+                                        .thenComparing(shop -> {
+                                            ItemStack item = shop.getItemStack();
+                                            return item != null ? item.getType().name() : "";
+                                        })
+                                        .thenComparingDouble(FoundShopItemModel::getShopPrice)
+                        );
+                        this.openShopMenuDescending(player, searchResultList, true, FindItemAddOn.getConfigProvider().NO_SHOP_FOUND_MSG, originCommand);
+                    }
+                });
+            } else {
+                List<FoundShopItemModel> searchResultList = FindItemAddOn.getQsApiInstance().fetchAllItemsFromAllShops(isBuying, player);
+                sortShopsByNearbyWarp(searchResultList, player);
+                if (isBuying) {
+                    Collections.shuffle(searchResultList);
+                    this.openShopMenu(player, searchResultList, false, FindItemAddOn.getConfigProvider().NO_SHOP_FOUND_MSG, originCommand, true);
+                } else {
                     searchResultList.sort(
                             Comparator.comparing((FoundShopItemModel shop) -> getPotionEffectSortKey(shop.getItemStack()))
                                     .thenComparing(shop -> {
@@ -112,27 +132,7 @@ public class CmdExecutorHandler {
                                     })
                                     .thenComparingDouble(FoundShopItemModel::getShopPrice)
                     );
-                    if (!isBuying) {
-                        this.openShopMenuDescending(player, searchResultList, true, FindItemAddOn.getConfigProvider().NO_SHOP_FOUND_MSG, originCommand);
-                    } else {
-                        this.openShopMenu(player, searchResultList, true, FindItemAddOn.getConfigProvider().NO_SHOP_FOUND_MSG, originCommand);
-                    }
-                });
-            } else {
-                List<FoundShopItemModel> searchResultList = FindItemAddOn.getQsApiInstance().fetchAllItemsFromAllShops(isBuying, player);
-                sortShopsByNearbyWarp(searchResultList, player);
-                searchResultList.sort(
-                        Comparator.comparing((FoundShopItemModel shop) -> getPotionEffectSortKey(shop.getItemStack()))
-                                .thenComparing(shop -> {
-                                    ItemStack item = shop.getItemStack();
-                                    return item != null ? item.getType().name() : "";
-                                })
-                                .thenComparingDouble(FoundShopItemModel::getShopPrice)
-                );
-                if (!isBuying) {
                     this.openShopMenuDescending(player, searchResultList, false, FindItemAddOn.getConfigProvider().NO_SHOP_FOUND_MSG, originCommand);
-                } else {
-                    this.openShopMenu(player, searchResultList, false, FindItemAddOn.getConfigProvider().NO_SHOP_FOUND_MSG, originCommand);
                 }
             }
         } else {
@@ -147,6 +147,28 @@ public class CmdExecutorHandler {
                     Bukkit.getScheduler().runTaskAsynchronously(FindItemAddOn.getInstance(), () -> {
                         List<FoundShopItemModel> searchResultList = FindItemAddOn.getQsApiInstance().findItemBasedOnTypeFromAllShops(new ItemStack(mat), isBuying, player);
                         sortShopsByNearbyWarp(searchResultList, player);
+                        if (isBuying) {
+                            Collections.shuffle(searchResultList);
+                            this.openShopMenu(player, searchResultList, true, FindItemAddOn.getConfigProvider().NO_SHOP_FOUND_MSG, originCommand, true);
+                        } else {
+                            searchResultList.sort(
+                                    Comparator.comparing((FoundShopItemModel shop) -> getPotionEffectSortKey(shop.getItemStack()))
+                                            .thenComparing(shop -> {
+                                                ItemStack item = shop.getItemStack();
+                                                return item != null ? item.getType().name() : "";
+                                            })
+                                            .thenComparingDouble(FoundShopItemModel::getShopPrice)
+                            );
+                            this.openShopMenuDescending(player, searchResultList, true, FindItemAddOn.getConfigProvider().NO_SHOP_FOUND_MSG, originCommand);
+                        }
+                    });
+                } else {
+                    List<FoundShopItemModel> searchResultList = FindItemAddOn.getQsApiInstance().findItemBasedOnTypeFromAllShops(new ItemStack(mat), isBuying, player);
+                    sortShopsByNearbyWarp(searchResultList, player);
+                    if (isBuying) {
+                        Collections.shuffle(searchResultList);
+                        this.openShopMenu(player, searchResultList, false, FindItemAddOn.getConfigProvider().NO_SHOP_FOUND_MSG, originCommand, true);
+                    } else {
                         searchResultList.sort(
                                 Comparator.comparing((FoundShopItemModel shop) -> getPotionEffectSortKey(shop.getItemStack()))
                                         .thenComparing(shop -> {
@@ -155,27 +177,7 @@ public class CmdExecutorHandler {
                                         })
                                         .thenComparingDouble(FoundShopItemModel::getShopPrice)
                         );
-                        if (!isBuying) {
-                            this.openShopMenuDescending(player, searchResultList, true, FindItemAddOn.getConfigProvider().NO_SHOP_FOUND_MSG, originCommand);
-                        } else {
-                            this.openShopMenu(player, searchResultList, true, FindItemAddOn.getConfigProvider().NO_SHOP_FOUND_MSG, originCommand);
-                        }
-                    });
-                } else {
-                    List<FoundShopItemModel> searchResultList = FindItemAddOn.getQsApiInstance().findItemBasedOnTypeFromAllShops(new ItemStack(mat), isBuying, player);
-                    sortShopsByNearbyWarp(searchResultList, player);
-                    searchResultList.sort(
-                            Comparator.comparing((FoundShopItemModel shop) -> getPotionEffectSortKey(shop.getItemStack()))
-                                    .thenComparing(shop -> {
-                                        ItemStack item = shop.getItemStack();
-                                        return item != null ? item.getType().name() : "";
-                                    })
-                                    .thenComparingDouble(FoundShopItemModel::getShopPrice)
-                    );
-                    if (!isBuying) {
                         this.openShopMenuDescending(player, searchResultList, false, FindItemAddOn.getConfigProvider().NO_SHOP_FOUND_MSG, originCommand);
-                    } else {
-                        this.openShopMenu(player, searchResultList, false, FindItemAddOn.getConfigProvider().NO_SHOP_FOUND_MSG, originCommand);
                     }
                 }
             } else {
@@ -184,6 +186,28 @@ public class CmdExecutorHandler {
                     Bukkit.getScheduler().runTaskAsynchronously(FindItemAddOn.getInstance(), () -> {
                         List<FoundShopItemModel> searchResultList = FindItemAddOn.getQsApiInstance().findItemBasedOnDisplayNameFromAllShops(itemArg, isBuying, player);
                         sortShopsByNearbyWarp(searchResultList, player);
+                        if (isBuying) {
+                            Collections.shuffle(searchResultList);
+                            this.openShopMenu(player, searchResultList, true, FindItemAddOn.getConfigProvider().FIND_ITEM_CMD_INVALID_MATERIAL_MSG, originCommand, true);
+                        } else {
+                            searchResultList.sort(
+                                    Comparator.comparing((FoundShopItemModel shop) -> getPotionEffectSortKey(shop.getItemStack()))
+                                            .thenComparing(shop -> {
+                                                ItemStack item = shop.getItemStack();
+                                                return item != null ? item.getType().name() : "";
+                                            })
+                                            .thenComparingDouble(FoundShopItemModel::getShopPrice)
+                            );
+                            this.openShopMenuDescending(player, searchResultList, true, FindItemAddOn.getConfigProvider().FIND_ITEM_CMD_INVALID_MATERIAL_MSG, originCommand);
+                        }
+                    });
+                } else {
+                    List<FoundShopItemModel> searchResultList = FindItemAddOn.getQsApiInstance().findItemBasedOnDisplayNameFromAllShops(itemArg, isBuying, player);
+                    sortShopsByNearbyWarp(searchResultList, player);
+                    if (isBuying) {
+                        Collections.shuffle(searchResultList);
+                        this.openShopMenu(player, searchResultList, false, FindItemAddOn.getConfigProvider().FIND_ITEM_CMD_INVALID_MATERIAL_MSG, originCommand, true);
+                    } else {
                         searchResultList.sort(
                                 Comparator.comparing((FoundShopItemModel shop) -> getPotionEffectSortKey(shop.getItemStack()))
                                         .thenComparing(shop -> {
@@ -192,27 +216,7 @@ public class CmdExecutorHandler {
                                         })
                                         .thenComparingDouble(FoundShopItemModel::getShopPrice)
                         );
-                        if (!isBuying) {
-                            this.openShopMenuDescending(player, searchResultList, true, FindItemAddOn.getConfigProvider().FIND_ITEM_CMD_INVALID_MATERIAL_MSG, originCommand);
-                        } else {
-                            this.openShopMenu(player, searchResultList, true, FindItemAddOn.getConfigProvider().FIND_ITEM_CMD_INVALID_MATERIAL_MSG, originCommand);
-                        }
-                    });
-                } else {
-                    List<FoundShopItemModel> searchResultList = FindItemAddOn.getQsApiInstance().findItemBasedOnDisplayNameFromAllShops(itemArg, isBuying, player);
-                    sortShopsByNearbyWarp(searchResultList, player);
-                    searchResultList.sort(
-                            Comparator.comparing((FoundShopItemModel shop) -> getPotionEffectSortKey(shop.getItemStack()))
-                                    .thenComparing(shop -> {
-                                        ItemStack item = shop.getItemStack();
-                                        return item != null ? item.getType().name() : "";
-                                    })
-                                    .thenComparingDouble(FoundShopItemModel::getShopPrice)
-                    );
-                    if (!isBuying) {
                         this.openShopMenuDescending(player, searchResultList, false, FindItemAddOn.getConfigProvider().FIND_ITEM_CMD_INVALID_MATERIAL_MSG, originCommand);
-                    } else {
-                        this.openShopMenu(player, searchResultList, false, FindItemAddOn.getConfigProvider().FIND_ITEM_CMD_INVALID_MATERIAL_MSG, originCommand);
                     }
                 }
             }
@@ -260,20 +264,24 @@ public class CmdExecutorHandler {
             }
 
             sortShopsByNearbyWarp(sellableItems, player);
-            sellableItems.sort(
-                    Comparator.comparing((FoundShopItemModel shop) -> getPotionEffectSortKey(shop.getItemStack()))
-                            .thenComparing((FoundShopItemModel shop) -> {
-                                ItemStack item = shop.getItemStack();
-                                return item != null ? item.getType().name() : "";
-                            })
-                            .thenComparingDouble(FoundShopItemModel::getShopPrice)
-            );
+            if (isBuying) {
+                Collections.shuffle(sellableItems);
+            } else {
+                sellableItems.sort(
+                        Comparator.comparing((FoundShopItemModel shop) -> getPotionEffectSortKey(shop.getItemStack()))
+                                .thenComparing((FoundShopItemModel shop) -> {
+                                    ItemStack item = shop.getItemStack();
+                                    return item != null ? item.getType().name() : "";
+                                })
+                                .thenComparingDouble(FoundShopItemModel::getShopPrice)
+                );
+            }
 
             Bukkit.getScheduler().runTask(FindItemAddOn.getInstance(), () -> {
                 if (!isBuying) {
                     openShopMenuDescending(player, sellableItems, false, "&cNo shops found buying any items in your inventory.", originCommand);
                 } else {
-                    openShopMenu(player, sellableItems, false, "&cNo shops found buying any items in your inventory.", originCommand);
+                    openShopMenu(player, sellableItems, false, "&cNo shops found buying any items in your inventory.", originCommand, true);
                 }
             });
         });
@@ -327,19 +335,19 @@ public class CmdExecutorHandler {
             }
 
             sortShopsByNearbyWarp(matchingBooks, player);
-            matchingBooks.sort(
-                    Comparator.comparing((FoundShopItemModel shop) -> getPotionEffectSortKey(shop.getItemStack()))
-                            .thenComparing(shop -> {
-                                ItemStack item = shop.getItemStack();
-                                return item != null ? item.getType().name() : "";
-                            })
-                            .thenComparingDouble(FoundShopItemModel::getShopPrice)
-            );
-
-            if (!isBuying) {
-                openShopMenuDescending(player, matchingBooks, true, "&cNo shops found selling that enchanted book!", originCommand);
+            if (isBuying) {
+                Collections.shuffle(matchingBooks);
+                openShopMenu(player, matchingBooks, true, "&cNo shops found selling that enchanted book!", originCommand, true);
             } else {
-                openShopMenu(player, matchingBooks, true, "&cNo shops found selling that enchanted book!", originCommand);
+                matchingBooks.sort(
+                        Comparator.comparing((FoundShopItemModel shop) -> getPotionEffectSortKey(shop.getItemStack()))
+                                .thenComparing(shop -> {
+                                    ItemStack item = shop.getItemStack();
+                                    return item != null ? item.getType().name() : "";
+                                })
+                                .thenComparingDouble(FoundShopItemModel::getShopPrice)
+                );
+                openShopMenuDescending(player, matchingBooks, true, "&cNo shops found selling that enchanted book!", originCommand);
             }
         };
 
@@ -413,19 +421,19 @@ public class CmdExecutorHandler {
             }
 
             sortShopsByNearbyWarp(matchingPotions, player);
-            matchingPotions.sort(
-                    Comparator.comparing((FoundShopItemModel shop) -> getPotionEffectSortKey(shop.getItemStack()))
-                            .thenComparing(shop -> {
-                                ItemStack item = shop.getItemStack();
-                                return item != null ? item.getType().name() : "";
-                            })
-                            .thenComparingDouble(FoundShopItemModel::getShopPrice)
-            );
-
-            if (!isBuying) {
-                openShopMenuDescending(player, matchingPotions, true, "&cNo shops found selling potions with that effect.", originCommand);
+            if (isBuying) {
+                Collections.shuffle(matchingPotions);
+                openShopMenu(player, matchingPotions, true, "&cNo shops found selling potions with that effect.", originCommand, true);
             } else {
-                openShopMenu(player, matchingPotions, true, "&cNo shops found selling potions with that effect.", originCommand);
+                matchingPotions.sort(
+                        Comparator.comparing((FoundShopItemModel shop) -> getPotionEffectSortKey(shop.getItemStack()))
+                                .thenComparing(shop -> {
+                                    ItemStack item = shop.getItemStack();
+                                    return item != null ? item.getType().name() : "";
+                                })
+                                .thenComparingDouble(FoundShopItemModel::getShopPrice)
+                );
+                openShopMenuDescending(player, matchingPotions, true, "&cNo shops found selling potions with that effect.", originCommand);
             }
         };
 
@@ -436,38 +444,43 @@ public class CmdExecutorHandler {
         }
     }
 
-    public void openShopMenu(Player player, List<FoundShopItemModel> searchResultList, boolean synchronize, String errorMsg, String originCommand) {
+    // --- Fixed: Buy menu is now truly shuffled, not sorted by price/type ---
+    public void openShopMenu(Player player, List<FoundShopItemModel> searchResultList, boolean synchronize, String errorMsg, String originCommand, boolean isBuying) {
         if (!searchResultList.isEmpty()) {
-            // Sort by potion effect name, then by type, then by price
-            searchResultList.sort(
-                    Comparator.comparing((FoundShopItemModel shop) -> getPotionEffectSortKey(shop.getItemStack()))
-                            .thenComparing((FoundShopItemModel shop) -> {
-                                ItemStack item = shop.getItemStack();
-                                return item != null ? item.getType().name() : "";
-                            })
-                            .thenComparingDouble(FoundShopItemModel::getShopPrice)
-            );
+            List<FoundShopItemModel> finalList;
+            if (isBuying) {
+                finalList = new ArrayList<>(searchResultList);
+                Collections.shuffle(finalList);
+            } else {
+                searchResultList.sort(
+                        Comparator.comparing((FoundShopItemModel shop) -> getPotionEffectSortKey(shop.getItemStack()))
+                                .thenComparing((FoundShopItemModel shop) -> {
+                                    ItemStack item = shop.getItemStack();
+                                    return item != null ? item.getType().name() : "";
+                                })
+                                .thenComparingDouble(FoundShopItemModel::getShopPrice)
+                );
+                Map<String, Map<Double, List<FoundShopItemModel>>> grouped =
+                        searchResultList.stream()
+                                .collect(Collectors.groupingBy(
+                                        shop -> {
+                                            ItemStack item = shop.getItemStack();
+                                            return item != null ? item.getType().name() : "";
+                                        },
+                                        TreeMap::new,
+                                        Collectors.groupingBy(
+                                                FoundShopItemModel::getShopPrice,
+                                                TreeMap::new,
+                                                Collectors.toList()
+                                        )
+                                ));
 
-            Map<String, Map<Double, List<FoundShopItemModel>>> grouped =
-                    searchResultList.stream()
-                            .collect(Collectors.groupingBy(
-                                    shop -> {
-                                        ItemStack item = shop.getItemStack();
-                                        return item != null ? item.getType().name() : "";
-                                    },
-                                    TreeMap::new,
-                                    Collectors.groupingBy(
-                                            FoundShopItemModel::getShopPrice,
-                                            TreeMap::new,
-                                            Collectors.toList()
-                                    )
-                            ));
-
-            List<FoundShopItemModel> sortedAndRandomizedList = new ArrayList<>();
-            for (Map<Double, List<FoundShopItemModel>> priceMap : grouped.values()) {
-                for (List<FoundShopItemModel> group : priceMap.values()) {
-                    Collections.shuffle(group);
-                    sortedAndRandomizedList.addAll(group);
+                finalList = new ArrayList<>();
+                for (Map<Double, List<FoundShopItemModel>> priceMap : grouped.values()) {
+                    for (List<FoundShopItemModel> group : priceMap.values()) {
+                        Collections.shuffle(group);
+                        finalList.addAll(group);
+                    }
                 }
             }
 
@@ -475,14 +488,14 @@ public class CmdExecutorHandler {
                 Bukkit.getScheduler().runTask(FindItemAddOn.getInstance(), () -> {
                     PlayerMenuUtility util = FindItemAddOn.getPlayerMenuUtility(player);
                     util.setOriginCommand(originCommand);
-                    FoundShopsMenu menu = new FoundShopsMenu(util, sortedAndRandomizedList);
-                    menu.open(sortedAndRandomizedList);
+                    FoundShopsMenu menu = new FoundShopsMenu(util, finalList, isBuying);
+                    menu.open(finalList);
                 });
             } else {
                 PlayerMenuUtility util = FindItemAddOn.getPlayerMenuUtility(player);
                 util.setOriginCommand(originCommand);
-                FoundShopsMenu menu = new FoundShopsMenu(util, sortedAndRandomizedList);
-                menu.open(sortedAndRandomizedList);
+                FoundShopsMenu menu = new FoundShopsMenu(util, finalList, isBuying);
+                menu.open(finalList);
             }
         } else {
             if (!StringUtils.isEmpty(errorMsg)) {
@@ -493,7 +506,6 @@ public class CmdExecutorHandler {
 
     public void openShopMenuDescending(Player player, List<FoundShopItemModel> searchResultList, boolean synchronize, String errorMsg, String originCommand) {
         if (!searchResultList.isEmpty()) {
-            // Sort by potion effect name, then by type, then by price (descending)
             searchResultList.sort(
                     Comparator.comparing((FoundShopItemModel shop) -> getPotionEffectSortKey(shop.getItemStack()))
                             .thenComparing((FoundShopItemModel shop) -> {
@@ -518,13 +530,13 @@ public class CmdExecutorHandler {
                 Bukkit.getScheduler().runTask(FindItemAddOn.getInstance(), () -> {
                     PlayerMenuUtility util = FindItemAddOn.getPlayerMenuUtility(player);
                     util.setOriginCommand(originCommand);
-                    FoundShopsMenu menu = new FoundShopsMenu(util, sortedAndRandomizedList);
+                    FoundShopsMenu menu = new FoundShopsMenu(util, sortedAndRandomizedList, false);
                     menu.open(sortedAndRandomizedList);
                 });
             } else {
                 PlayerMenuUtility util = FindItemAddOn.getPlayerMenuUtility(player);
                 util.setOriginCommand(originCommand);
-                FoundShopsMenu menu = new FoundShopsMenu(util, sortedAndRandomizedList);
+                FoundShopsMenu menu = new FoundShopsMenu(util, sortedAndRandomizedList, false);
                 menu.open(sortedAndRandomizedList);
             }
         } else {
@@ -543,7 +555,6 @@ public class CmdExecutorHandler {
             if (player.hasPermission(PlayerPermsEnum.FINDITEM_HIDESHOP.value())) {
                 Block playerLookAtBlock = player.getTargetBlock(null, 3);
                 Logger.logDebugInfo("TargetBlock found: " + playerLookAtBlock.getType());
-                // Only handle QuickShop-Hikari
                 hideHikariShop(
                         (com.ghostchu.quickshop.api.shop.Shop) FindItemAddOn.getQsApiInstance().findShopAtLocation(playerLookAtBlock),
                         player
@@ -585,7 +596,6 @@ public class CmdExecutorHandler {
 
     public void handlePluginReload(CommandSender commandSender) {
         if (!(commandSender instanceof Player player)) {
-            // Console or non-player sender
             ConfigSetup.reloadConfig();
             ConfigSetup.checkForMissingProperties();
             ConfigSetup.saveConfig();
@@ -599,7 +609,6 @@ public class CmdExecutorHandler {
             }
             WarpUtils.updateWarps();
         } else {
-            // Player sender
             if (player.hasPermission(PlayerPermsEnum.FINDITEM_RELOAD.value()) || player.hasPermission(PlayerPermsEnum.FINDITEM_ADMIN.value())) {
                 ConfigSetup.reloadConfig();
                 ConfigSetup.checkForMissingProperties();
@@ -696,7 +705,6 @@ public class CmdExecutorHandler {
         }
     }
 
-
     private void revealShop(com.ghostchu.quickshop.api.shop.Shop shop, Player player) {
         if(shop != null) {
             if(FindItemAddOn.getQsApiInstance().isShopOwnerCommandRunner(player, shop)) {
@@ -767,7 +775,7 @@ public class CmdExecutorHandler {
             );
 
             Bukkit.getScheduler().runTask(FindItemAddOn.getInstance(), () -> {
-                openShopMenu(player, outOfStockModels, false, "&cYou have no out-of-stock shops.", "wtsmenu");
+                openShopMenu(player, outOfStockModels, false, "&cYou have no out-of-stock shops.", "wtsmenu", false);
             });
         });
     }
@@ -809,19 +817,19 @@ public class CmdExecutorHandler {
                     .collect(Collectors.toList());
 
             sortShopsByNearbyWarp(unbreakableItems, player);
-            unbreakableItems.sort(
-                    Comparator.comparing((FoundShopItemModel shop) -> getPotionEffectSortKey(shop.getItemStack()))
-                            .thenComparing(shop -> {
-                                ItemStack item = shop.getItemStack();
-                                return item != null ? item.getType().name() : "";
-                            })
-                            .thenComparingDouble(FoundShopItemModel::getShopPrice)
-            );
-
-            if (!isBuying) {
-                openShopMenuDescending(player, unbreakableItems, true, "&cNo shops found selling unbreakable items!", originCommand);
+            if (isBuying) {
+                Collections.shuffle(unbreakableItems);
+                openShopMenu(player, unbreakableItems, true, "&cNo shops found selling unbreakable items!", originCommand, true);
             } else {
-                openShopMenu(player, unbreakableItems, true, "&cNo shops found selling unbreakable items!", originCommand);
+                unbreakableItems.sort(
+                        Comparator.comparing((FoundShopItemModel shop) -> getPotionEffectSortKey(shop.getItemStack()))
+                                .thenComparing(shop -> {
+                                    ItemStack item = shop.getItemStack();
+                                    return item != null ? item.getType().name() : "";
+                                })
+                                .thenComparingDouble(FoundShopItemModel::getShopPrice)
+                );
+                openShopMenuDescending(player, unbreakableItems, true, "&cNo shops found selling unbreakable items!", originCommand);
             }
         };
 

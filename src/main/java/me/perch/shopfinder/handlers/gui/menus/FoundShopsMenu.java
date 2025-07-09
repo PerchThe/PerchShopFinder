@@ -49,9 +49,19 @@ public class FoundShopsMenu extends PaginatedMenu {
     // NEW: Track the shops shown on the current page, in slot order
     private final List<FoundShopItemModel> currentPageShops = new ArrayList<>();
 
-    public FoundShopsMenu(PlayerMenuUtility playerMenuUtility, List<FoundShopItemModel> searchResult) {
+    // NEW: Track if this is a buy or sell menu
+    private final boolean isBuying;
+
+    // NEW: Constructor with isBuying flag
+    public FoundShopsMenu(PlayerMenuUtility playerMenuUtility, List<FoundShopItemModel> searchResult, boolean isBuying) {
         super(playerMenuUtility, searchResult);
         configProvider = FindItemAddOn.getConfigProvider();
+        this.isBuying = isBuying;
+    }
+
+    // Old constructor for backward compatibility (defaults to sell menu)
+    public FoundShopsMenu(PlayerMenuUtility playerMenuUtility, List<FoundShopItemModel> searchResult) {
+        this(playerMenuUtility, searchResult, false);
     }
 
     @Override
@@ -299,7 +309,17 @@ public class FoundShopsMenu extends PaginatedMenu {
             }
         }
 
-        for (String loreLine : configProvider.SHOP_GUI_ITEM_LORE) {
+        // Use different lore for buy/sell menus if available
+        List<String> loreTemplate;
+        if (isBuying && configProvider.SHOP_GUI_ITEM_LORE_BUY != null) {
+            loreTemplate = configProvider.SHOP_GUI_ITEM_LORE_BUY;
+        } else if (!isBuying && configProvider.SHOP_GUI_ITEM_LORE_SELL != null) {
+            loreTemplate = configProvider.SHOP_GUI_ITEM_LORE_SELL;
+        } else {
+            loreTemplate = configProvider.SHOP_GUI_ITEM_LORE;
+        }
+
+        for (String loreLine : loreTemplate) {
             if (loreLine.contains(ShopLorePlaceholdersEnum.NEAREST_WARP.value())) {
                 String nearestWarpInfo = getNearestWarpInfo(foundShop);
                 lore.add(ColorTranslator.translateColorCodes(

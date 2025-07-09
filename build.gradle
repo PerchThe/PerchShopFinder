@@ -102,7 +102,7 @@ shadowJar {
 tasks.register('copyPluginJar', Copy) {
     dependsOn shadowJar
     from("$buildDir/libs/PerchShopFinder-${version}-all.jar")
-    into "/Users/kayalambrechts/Desktop/AllToGradle/PerchFindItem/build/libs" // <-- Change this to your plugins directory
+    into "/Users/kayalambrechts/IdeaProjects/PerchShopFinder" // <-- Change this to your plugins directory
 }
 
 processResources {

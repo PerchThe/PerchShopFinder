@@ -64,7 +64,9 @@ public class ConfigProvider {
     public final boolean SEARCH_LOADED_SHOPS_ONLY = ConfigSetup.get().getBoolean("search-loaded-shops-only");
     public final String SHOP_SEARCH_GUI_TITLE = ConfigSetup.get().getString("shop-search-gui-title");
     public final int NEAREST_WARP_MODE = ConfigSetup.get().getInt("nearest-warp-mode");
-    public final List<String> SHOP_GUI_ITEM_LORE = (List<String>) ConfigSetup.get().getList("shop-gui-item-lore");
+    public final List<String> SHOP_GUI_ITEM_LORE_BUY = (List<String>) ConfigSetup.get().getList("SHOP-GUI-ITEM-LORE-BUY");
+    public final List<String> SHOP_GUI_ITEM_LORE_SELL = (List<String>) ConfigSetup.get().getList("SHOP-GUI-ITEM-LORE-SELL");
+    public final List<String> SHOP_GUI_ITEM_LORE = (List<String>) ConfigSetup.get().getList("SHOP-GUI-ITEM-LORE");
     public final boolean TP_PLAYER_DIRECTLY_TO_SHOP = ConfigSetup.get().getBoolean(PLAYER_SHOP_TELEPORTATION + DIRECT_SHOP_TP_MODE + "tp-player-directly-to-shop");
     public final String CLICK_TO_TELEPORT_MSG = ConfigSetup.get().getString(PLAYER_SHOP_TELEPORTATION + DIRECT_SHOP_TP_MODE + "click-to-teleport-message");
     public final String SHOP_TP_NO_PERMISSION_MSG = ConfigSetup.get().getString(PLAYER_SHOP_TELEPORTATION + DIRECT_SHOP_TP_MODE + "shop-tp-no-permission-message");
