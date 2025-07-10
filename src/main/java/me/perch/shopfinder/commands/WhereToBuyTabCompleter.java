@@ -173,7 +173,7 @@ public class WhereToBuyTabCompleter implements TabCompleter {
         if ("voucher".startsWith(toComplete)) completions.add("voucher");
         if ("unbreakable".startsWith(toComplete)) completions.add("unbreakable");
         if ("key".startsWith(toComplete)) completions.add("key");
-        if ("claimblocks".startsWith(toComplete)) completions.add("claimblocks");
+        if ("claimblocks".startsWith(toComplete)) completions.add("claim");
         if ("playtime".startsWith(toComplete)) completions.add("playtime");
         if ("*".startsWith(toComplete)) completions.add("*");
 
