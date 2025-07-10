@@ -124,6 +124,32 @@ public class WhereToSellCommand implements CommandExecutor {
             return true;
         }
 
+        if (firstArg.equals("*")) {
+            Bukkit.getScheduler().runTaskAsynchronously(JavaPlugin.getProvidingPlugin(getClass()), () -> {
+                boolean isSelling = sellCommand.equalsIgnoreCase("TO_SELL") ||
+                        sellCommand.equalsIgnoreCase(FindItemAddOn.getConfigProvider().FIND_ITEM_TO_SELL_AUTOCOMPLETE);
+
+                // For selling, fetch all items shops are buying (isSelling = true)
+                List<FoundShopItemModel> allItems = (List<FoundShopItemModel>) FindItemAddOn.getQsApiInstance()
+                        .fetchAllItemsFromAllShops(isSelling, player);
+
+                Bukkit.getScheduler().runTask(JavaPlugin.getProvidingPlugin(getClass()), () -> {
+                    if (allItems.isEmpty()) {
+                        player.sendMessage(ColorTranslator.translateColorCodes("&cNo items found to sell."));
+                        player.performCommand("wtsmenu");
+                    } else {
+                        // --- SORT: by item type (alphabetically), then by price (descending) ---
+                        allItems.sort(
+                                Comparator.comparing((FoundShopItemModel m) -> m.getItem().getType().name())
+                                        .thenComparing(Comparator.comparingDouble(FoundShopItemModel::getShopPrice).reversed())
+                        );
+                        cmdExecutor.openShopMenuDescending(player, allItems, false, FindItemAddOn.getConfigProvider().NO_SHOP_FOUND_MSG, "wtsmenu");
+                    }
+                });
+            });
+            return true;
+        }
+
         boolean isSelling = sellCommand.equalsIgnoreCase("TO_SELL") ||
                 sellCommand.equalsIgnoreCase(FindItemAddOn.getConfigProvider().FIND_ITEM_TO_SELL_AUTOCOMPLETE);
 

@@ -106,9 +106,6 @@ public class WhereToBuyCommand implements CommandExecutor {
             return true;
         }
 
-        // Defensive copy for async safety
-        String[] searchArgs = args.clone();
-
         if (firstArg.equalsIgnoreCase("hand")) {
             Material handMat = player.getInventory().getItemInMainHand().getType();
             if (handMat == Material.AIR) {
@@ -117,13 +114,43 @@ public class WhereToBuyCommand implements CommandExecutor {
                 return true;
             }
             // Replace first arg with the item in hand, keep the rest
-            searchArgs[0] = handMat.name();
+            args[0] = handMat.name();
         }
 
         if (firstArg.equalsIgnoreCase("unbreakable")) {
             cmdExecutor.handleShopSearchForUnbreakable(buyCommand, sender);
             return true;
         }
+
+        // --- NEW: Show all items for sale if "*" is used ---
+        if (firstArg.equals("*")) {
+            Bukkit.getScheduler().runTaskAsynchronously(JavaPlugin.getProvidingPlugin(getClass()), () -> {
+                boolean isBuying = buyCommand.equalsIgnoreCase("TO_BUY") ||
+                        buyCommand.equalsIgnoreCase(FindItemAddOn.getConfigProvider().FIND_ITEM_TO_BUY_AUTOCOMPLETE);
+
+                List<FoundShopItemModel> allItems = (List<FoundShopItemModel>) FindItemAddOn.getQsApiInstance()
+                        .fetchAllItemsFromAllShops(isBuying, player);
+
+                Bukkit.getScheduler().runTask(JavaPlugin.getProvidingPlugin(getClass()), () -> {
+                    if (allItems.isEmpty()) {
+                        player.sendMessage(ColorTranslator.translateColorCodes("&cNo items found for sale."));
+                        player.performCommand("wtbmenu");
+                    } else {
+                        // --- SORT: by item type (alphabetically) only ---
+                        allItems.sort(Comparator.comparing(m -> m.getItem().getType().name()));
+                        if (isBuying) {
+                            cmdExecutor.openShopMenu(player, allItems, false, FindItemAddOn.getConfigProvider().NO_SHOP_FOUND_MSG, "wtbmenu", true);
+                        } else {
+                            cmdExecutor.openShopMenuDescending(player, allItems, false, FindItemAddOn.getConfigProvider().NO_SHOP_FOUND_MSG, "wtsmenu");
+                        }
+                    }
+                });
+            });
+            return true;
+        }
+
+        // Defensive copy for async safety
+        String[] searchArgs = args.clone();
 
         boolean isBuying = buyCommand.equalsIgnoreCase("TO_BUY") ||
                 buyCommand.equalsIgnoreCase(FindItemAddOn.getConfigProvider().FIND_ITEM_TO_BUY_AUTOCOMPLETE);
