@@ -18,6 +18,8 @@ import me.perch.shopfinder.utils.log.Logger;
 import me.perch.shopfinder.utils.warp.EssentialWarpsUtil;
 import me.perch.shopfinder.utils.warp.PlayerWarpsUtil;
 import me.perch.shopfinder.utils.warp.WGRegionUtils;
+import org.bukkit.enchantments.Enchantment;
+import org.bukkit.inventory.ItemFlag;
 import io.papermc.lib.PaperLib;
 import me.kodysimpson.simpapi.colors.ColorTranslator;
 import org.apache.commons.lang3.StringUtils;
@@ -46,13 +48,13 @@ public class FoundShopsMenu extends PaginatedMenu {
     private static final String NAMEDSPACE_KEY_LOCATION_DATA = "locationData";
     private final ConfigProvider configProvider;
 
-    // NEW: Track the shops shown on the current page, in slot order
+    // Track the shops shown on the current page, in slot order
     private final List<FoundShopItemModel> currentPageShops = new ArrayList<>();
 
-    // NEW: Track if this is a buy or sell menu
+    // Track if this is a buy or sell menu
     private final boolean isBuying;
 
-    // NEW: Constructor with isBuying flag
+    // Constructor with isBuying flag
     public FoundShopsMenu(PlayerMenuUtility playerMenuUtility, List<FoundShopItemModel> searchResult, boolean isBuying) {
         super(playerMenuUtility, searchResult);
         configProvider = FindItemAddOn.getConfigProvider();
@@ -137,7 +139,7 @@ public class FoundShopsMenu extends PaginatedMenu {
         };
     }
 
-    // UPDATED: Now receives the correct FoundShopItemModel directly
+    // Receives the correct FoundShopItemModel directly
     private void handleShopItemClick(@NotNull InventoryClickEvent event, Player player, FoundShopItemModel foundShop) {
         // For direct shop teleport
         if (configProvider.TP_PLAYER_DIRECTLY_TO_SHOP) {
@@ -170,7 +172,7 @@ public class FoundShopsMenu extends PaginatedMenu {
         player.closeInventory();
     }
 
-    // UPDATED: Accepts Location directly
+    // Accepts Location directly
     private void handleDirectShopTeleport(@NotNull Player player, Location shopLocation) {
         if (!player.hasPermission(PlayerPermsEnum.FINDITEM_SHOPTP.value())) {
             sendNoPermissionMessage(player);
@@ -228,7 +230,7 @@ public class FoundShopsMenu extends PaginatedMenu {
         }
     }
 
-    // UPDATED: Accepts Location directly
+    // Accepts Location directly
     private void handleCustomCommands(Player player, Location shopLocation) {
         if (configProvider.CUSTOM_CMDS_RUN_ENABLED && !configProvider.CUSTOM_CMDS_LIST.isEmpty()
                 && shopLocation != null) {
@@ -277,6 +279,28 @@ public class FoundShopsMenu extends PaginatedMenu {
             ItemStack item = createShopItem(foundShop);
             inventory.setItem(shopItemSlot, item);
             currentPageShops.add(foundShop); // Track the shop for this slot
+
+            // --- GLOW IF FAVOURITE ---
+            if (configProvider.NEAREST_WARP_MODE == 2 && PlayerWarpsPlugin.getIsEnabled()) {
+                Player viewingPlayer = playerMenuUtility.getOwner();
+                Warp nearestWarp = PlayerWarpsUtil.findNearestWarp(
+                        foundShop.getShopLocation(),
+                        viewingPlayer,
+                        foundShop.getShopOwner()
+                );
+                if (nearestWarp != null) {
+                    final int slot = shopItemSlot; // Fix for lambda variable capture
+                    PlayerWarpsPlugin.isFavourite(viewingPlayer, nearestWarp.getWarpName(), isFav -> {
+                        if (isFav) {
+                            ItemStack glowing = makeItemGlow(item.clone());
+                            // Update the item in the inventory (must be run on the main thread)
+                            Bukkit.getScheduler().runTask(FindItemAddOn.getInstance(), () -> {
+                                inventory.setItem(slot, glowing);
+                            });
+                        }
+                    });
+                }
+            }
         }
     }
 
@@ -298,6 +322,20 @@ public class FoundShopsMenu extends PaginatedMenu {
         }
 
         item.setItemMeta(meta);
+        return item;
+    }
+
+    // --- GLOW UTILITY ---
+    private ItemStack makeItemGlow(ItemStack item) {
+        ItemMeta meta = item.getItemMeta();
+        if (meta != null) {
+            Enchantment durability = org.bukkit.enchantments.Enchantment.getByName("DURABILITY");
+            if (durability != null) {
+                meta.addEnchant(durability, 1, true);
+            }
+            meta.addItemFlags(ItemFlag.HIDE_ENCHANTS);
+            item.setItemMeta(meta);
+        }
         return item;
     }
 

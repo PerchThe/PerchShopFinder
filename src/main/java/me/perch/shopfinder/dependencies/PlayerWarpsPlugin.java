@@ -1,6 +1,7 @@
 package me.perch.shopfinder.dependencies;
 
 import com.olziedev.playerwarps.api.PlayerWarpsAPI;
+import com.olziedev.playerwarps.api.player.WPlayer;
 import com.olziedev.playerwarps.api.warp.Warp;
 import me.perch.shopfinder.FindItemAddOn;
 import me.perch.shopfinder.utils.enums.NearestWarpModeEnum;
@@ -11,6 +12,8 @@ import org.bukkit.entity.Player;
 
 import java.util.Collections;
 import java.util.List;
+import java.util.function.Consumer;
+import java.util.stream.Collectors;
 
 /**
  * @author myzticbean
@@ -126,7 +129,7 @@ public class PlayerWarpsPlugin {
                 Warp warp = api.getPlayerWarp(warpName, player);
                 locked[0] = warp != null && warp.isWarpLocked();
             }
-        }); 
+        });
         return locked[0];
     }
 
@@ -166,5 +169,40 @@ public class PlayerWarpsPlugin {
             }
         });
         return total[0];
+    }
+
+    /**
+     * Checks asynchronously if a warp is a favourite for the given player.
+     * The result is returned via the callback.
+     */
+    public static void isFavourite(Player player, String warpName, Consumer<Boolean> callback) {
+        if (!isEnabled || player == null || warpName == null) {
+            callback.accept(false);
+            return;
+        }
+        PlayerWarpsAPI.getInstance(api -> {
+            boolean isFav = false;
+            if (api != null) {
+                WPlayer wPlayer = api.getWarpPlayer(player.getUniqueId());
+                if (wPlayer != null) {
+                    List<Warp> favourites = wPlayer.getFavouriteWarps(player);
+                    isFav = favourites.stream().anyMatch(warp -> warp.getWarpName().equalsIgnoreCase(warpName));
+                }
+            }
+            callback.accept(isFav);
+        });
+    }
+
+    /**
+     * Returns a list of warp names owned by the given player.
+     */
+    public static List<String> getPlayerWarpNames(Player player) {
+        PlayerWarpsAPI api = getAPI();
+        if (api == null || player == null) return Collections.emptyList();
+        WPlayer wPlayer = api.getWarpPlayer(player.getUniqueId());
+        if (wPlayer == null) return Collections.emptyList();
+        List<Warp> warps = wPlayer.getWarps(false);
+        if (warps == null) return Collections.emptyList();
+        return warps.stream().map(Warp::getWarpName).collect(Collectors.toList());
     }
 }

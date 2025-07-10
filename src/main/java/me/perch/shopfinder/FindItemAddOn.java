@@ -1,21 +1,3 @@
-/**
- * QSFindItemAddOn: An Minecraft add-on plugin for the QuickShop Hikari
- * and Reremake Shop plugins for Spigot server platform.
- * Copyright (C) 2021  myzticbean
- * <p>
- * This program is free software: you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation, either version 3 of the License, or
- * (at your option) any later version.
- * <p>
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- * <p>
- * You should have received a copy of the GNU General Public License
- * along with this program.  If not, see <https://www.gnu.org/licenses/>.
- */
 package me.perch.shopfinder;
 
 import me.perch.shopfinder.commands.*;
@@ -29,7 +11,7 @@ import me.perch.shopfinder.config.ConfigSetup;
 import me.perch.shopfinder.dependencies.EssentialsXPlugin;
 import me.perch.shopfinder.dependencies.PlayerWarpsPlugin;
 import me.perch.shopfinder.dependencies.WGPlugin;
-import me.perch.shopfinder.handlers.command.CmdExecutorHandler; // <-- Add this import
+import me.perch.shopfinder.handlers.command.CmdExecutorHandler;
 import me.perch.shopfinder.handlers.gui.PlayerMenuUtility;
 import me.perch.shopfinder.listeners.MenuListener;
 import me.perch.shopfinder.listeners.PWPlayerWarpCreateEventListener;
@@ -46,6 +28,7 @@ import me.perch.shopfinder.utils.json.ShopSearchActivityStorageUtil;
 import me.perch.shopfinder.utils.log.Logger;
 import me.perch.shopfinder.utils.UpdateChecker;
 import me.perch.shopfinder.utils.ShopHighlighter;
+import me.perch.shopfinder.utils.ExcludedWarpsUtil; // <-- Make sure this is imported!
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import me.kodysimpson.simpapi.colors.ColorTranslator;
@@ -66,23 +49,16 @@ import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 
-/**
- * @author myzticbean
- */
 @Slf4j
 public final class FindItemAddOn extends JavaPlugin {
 
     // ONLY FOR SNAPSHOT BUILDS
-    // Change it to whenever you want your snapshot trial build to expire
     private static final boolean ENABLE_TRIAL_PERIOD = false;
     private static final int TRIAL_END_YEAR = 2024, TRIAL_END_MONTH = 5, TRIAL_END_DAY = 5;
-    // ************************************************************************************
 
     private static Plugin pluginInstance;
     public FindItemAddOn() { pluginInstance = this; }
-    public static Plugin getInstance() {
-        return pluginInstance;
-    }
+    public static Plugin getInstance() { return pluginInstance; }
     public static String serverVersion;
     private static final int BS_PLUGIN_METRIC_ID = 12382;
     private static final int SPIGOT_PLUGIN_ID = 95104;
@@ -100,21 +76,23 @@ public final class FindItemAddOn extends JavaPlugin {
 
     private static final HashMap<Player, PlayerMenuUtility> playerMenuUtilityMap = new HashMap<>();
 
-    // --- ADDED: Shared handler for commands ---
     private CmdExecutorHandler cmdExecutorHandler;
 
     @Override
     public void onLoad() {
         Logger.logInfo("A Shop Search AddOn for QuickShop developed by myzticbean");
 
-        // Show warning if it's a snapshot build
         if(this.getDescription().getVersion().toLowerCase().contains("snapshot")) {
             Logger.logWarning("This is a SNAPSHOT build! NOT recommended for production servers.");
             Logger.logWarning("If you find any bugs, please report them here: https://github.com/myzticbean/QSFindItemAddOn/issues");
         }
     }
+
     @Override
     public void onEnable() {
+
+        // --- FIX: Initialize ExcludedWarpsUtil here ---
+        ExcludedWarpsUtil.init(this);
 
         if(ENABLE_TRIAL_PERIOD) {
             Logger.logWarning("THIS IS A TRIAL BUILD!");
@@ -168,7 +146,9 @@ public final class FindItemAddOn extends JavaPlugin {
         getCommand("wheretobuy").setTabCompleter(new WhereToBuyTabCompleter());
 
         getCommand("excludewarp").setExecutor(new ExcludeWarpCommand());
+        getCommand("excludewarp").setTabCompleter(new ExcludeWarpCommand());
         getCommand("includewarp").setExecutor(new ExcludeWarpCommand());
+        getCommand("includewarp").setTabCompleter(new ExcludeWarpCommand());
 
         getCommand("wheretosell").setExecutor(new WhereToSellCommand());
         getCommand("wheretosell").setTabCompleter(new WhereToSellTabCompleter());
@@ -179,7 +159,6 @@ public final class FindItemAddOn extends JavaPlugin {
 
     @Override
     public void onDisable() {
-        // Plugin shutdown logic
         if(qsApi != null) {
             ShopSearchActivityStorageUtil.saveShopsToFile();
         }
@@ -208,20 +187,15 @@ public final class FindItemAddOn extends JavaPlugin {
             qsApi.registerSubCommand();
         }
 
-        // Load all hidden shops from file
         ShopSearchActivityStorageUtil.loadShopsFromFile();
-
-        // v2.0.0.0 - Migrating hiddenShops.json to shops.json
         ShopSearchActivityStorageUtil.migrateHiddenShopsToShopsJson();
 
-        // Setup optional dependencies
         PlayerWarpsPlugin.setup();
         EssentialsXPlugin.setup();
         WGPlugin.setup();
 
         initExternalPluginEventListeners();
 
-        // Initiate batch tasks
         Logger.logInfo("Registering tasks");
         Bukkit.getServer().getScheduler().scheduleSyncRepeatingTask(this, new Task15MinInterval(), 0, REPEATING_TASK_SCHEDULE_MINS);
 
@@ -292,7 +266,6 @@ public final class FindItemAddOn extends JavaPlugin {
                     SellSubCmd.class, BuySubCmd.class, HideShopSubCmd.class, RevealShopSubCmd.class
             };
         }
-        // Register the subcommands under a core command
         try {
             CommandManager.createCoreCommand(
                     this,
