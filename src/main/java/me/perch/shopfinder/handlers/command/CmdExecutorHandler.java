@@ -33,7 +33,6 @@ public class CmdExecutorHandler {
 
     private static final String THIS_COMMAND_CAN_ONLY_BE_RUN_FROM_IN_GAME = "This command can only be run from in game";
 
-    // --- Utility: Get potion effect key for sorting ---
     private static String getPotionEffectSortKey(ItemStack item) {
         if (item == null) return "";
         if (!(item.getItemMeta() instanceof PotionMeta meta)) return "";
@@ -55,7 +54,6 @@ public class CmdExecutorHandler {
         return String.join(";", effects);
     }
 
-    // --- Utility: Sort shops with no nearby warp to the end ---
     private static void sortShopsByNearbyWarp(List<FoundShopItemModel> shops, Player player) {
         shops.sort((a, b) -> {
             boolean aHasWarp = false;
@@ -103,7 +101,6 @@ public class CmdExecutorHandler {
                     List<FoundShopItemModel> searchResultList = FindItemAddOn.getQsApiInstance().fetchAllItemsFromAllShops(isBuying, player);
                     sortShopsByNearbyWarp(searchResultList, player);
                     if (isBuying) {
-                        Collections.shuffle(searchResultList);
                         this.openShopMenu(player, searchResultList, true, FindItemAddOn.getConfigProvider().NO_SHOP_FOUND_MSG, originCommand, true);
                     } else {
                         searchResultList.sort(
@@ -121,7 +118,6 @@ public class CmdExecutorHandler {
                 List<FoundShopItemModel> searchResultList = FindItemAddOn.getQsApiInstance().fetchAllItemsFromAllShops(isBuying, player);
                 sortShopsByNearbyWarp(searchResultList, player);
                 if (isBuying) {
-                    Collections.shuffle(searchResultList);
                     this.openShopMenu(player, searchResultList, false, FindItemAddOn.getConfigProvider().NO_SHOP_FOUND_MSG, originCommand, true);
                 } else {
                     searchResultList.sort(
@@ -148,7 +144,6 @@ public class CmdExecutorHandler {
                         List<FoundShopItemModel> searchResultList = FindItemAddOn.getQsApiInstance().findItemBasedOnTypeFromAllShops(new ItemStack(mat), isBuying, player);
                         sortShopsByNearbyWarp(searchResultList, player);
                         if (isBuying) {
-                            Collections.shuffle(searchResultList);
                             this.openShopMenu(player, searchResultList, true, FindItemAddOn.getConfigProvider().NO_SHOP_FOUND_MSG, originCommand, true);
                         } else {
                             searchResultList.sort(
@@ -166,7 +161,6 @@ public class CmdExecutorHandler {
                     List<FoundShopItemModel> searchResultList = FindItemAddOn.getQsApiInstance().findItemBasedOnTypeFromAllShops(new ItemStack(mat), isBuying, player);
                     sortShopsByNearbyWarp(searchResultList, player);
                     if (isBuying) {
-                        Collections.shuffle(searchResultList);
                         this.openShopMenu(player, searchResultList, false, FindItemAddOn.getConfigProvider().NO_SHOP_FOUND_MSG, originCommand, true);
                     } else {
                         searchResultList.sort(
@@ -187,7 +181,6 @@ public class CmdExecutorHandler {
                         List<FoundShopItemModel> searchResultList = FindItemAddOn.getQsApiInstance().findItemBasedOnDisplayNameFromAllShops(itemArg, isBuying, player);
                         sortShopsByNearbyWarp(searchResultList, player);
                         if (isBuying) {
-                            Collections.shuffle(searchResultList);
                             this.openShopMenu(player, searchResultList, true, FindItemAddOn.getConfigProvider().FIND_ITEM_CMD_INVALID_MATERIAL_MSG, originCommand, true);
                         } else {
                             searchResultList.sort(
@@ -205,7 +198,6 @@ public class CmdExecutorHandler {
                     List<FoundShopItemModel> searchResultList = FindItemAddOn.getQsApiInstance().findItemBasedOnDisplayNameFromAllShops(itemArg, isBuying, player);
                     sortShopsByNearbyWarp(searchResultList, player);
                     if (isBuying) {
-                        Collections.shuffle(searchResultList);
                         this.openShopMenu(player, searchResultList, false, FindItemAddOn.getConfigProvider().FIND_ITEM_CMD_INVALID_MATERIAL_MSG, originCommand, true);
                     } else {
                         searchResultList.sort(
@@ -265,7 +257,7 @@ public class CmdExecutorHandler {
 
             sortShopsByNearbyWarp(sellableItems, player);
             if (isBuying) {
-                Collections.shuffle(sellableItems);
+                openShopMenu(player, sellableItems, false, "&cNo shops found buying any items in your inventory.", originCommand, true);
             } else {
                 sellableItems.sort(
                         Comparator.comparing((FoundShopItemModel shop) -> getPotionEffectSortKey(shop.getItemStack()))
@@ -275,15 +267,8 @@ public class CmdExecutorHandler {
                                 })
                                 .thenComparingDouble(FoundShopItemModel::getShopPrice)
                 );
+                openShopMenuDescending(player, sellableItems, false, "&cNo shops found buying any items in your inventory.", originCommand);
             }
-
-            Bukkit.getScheduler().runTask(FindItemAddOn.getInstance(), () -> {
-                if (!isBuying) {
-                    openShopMenuDescending(player, sellableItems, false, "&cNo shops found buying any items in your inventory.", originCommand);
-                } else {
-                    openShopMenu(player, sellableItems, false, "&cNo shops found buying any items in your inventory.", originCommand, true);
-                }
-            });
         });
     }
 
@@ -336,7 +321,6 @@ public class CmdExecutorHandler {
 
             sortShopsByNearbyWarp(matchingBooks, player);
             if (isBuying) {
-                Collections.shuffle(matchingBooks);
                 openShopMenu(player, matchingBooks, true, "&cNo shops found selling that enchanted book!", originCommand, true);
             } else {
                 matchingBooks.sort(
@@ -422,7 +406,6 @@ public class CmdExecutorHandler {
 
             sortShopsByNearbyWarp(matchingPotions, player);
             if (isBuying) {
-                Collections.shuffle(matchingPotions);
                 openShopMenu(player, matchingPotions, true, "&cNo shops found selling potions with that effect.", originCommand, true);
             } else {
                 matchingPotions.sort(
@@ -444,10 +427,8 @@ public class CmdExecutorHandler {
         }
     }
 
-    // --- Fixed: Buy menu is now truly shuffled, not sorted by price/type ---
     public void openShopMenu(Player player, List<FoundShopItemModel> searchResultList, boolean synchronize, String errorMsg, String originCommand, boolean isBuying) {
         if (!searchResultList.isEmpty()) {
-            // --- Group by item type, then shuffle or sort as needed ---
             Map<Material, List<FoundShopItemModel>> grouped = new HashMap<>();
             for (FoundShopItemModel shop : searchResultList) {
                 ItemStack item = shop.getItemStack();
@@ -459,23 +440,25 @@ public class CmdExecutorHandler {
             List<FoundShopItemModel> finalList = new ArrayList<>();
 
             if (isBuying) {
-                // Shuffle the groups (item types)
                 List<Material> types = new ArrayList<>(grouped.keySet());
-                Collections.shuffle(types);
-
+                types.sort(Comparator.comparing(Enum::name));
                 for (Material type : types) {
                     List<FoundShopItemModel> shops = grouped.get(type);
-                    Collections.shuffle(shops); // Shuffle within group
-                    finalList.addAll(shops);
+                    Map<Integer, List<FoundShopItemModel>> byStock = shops.stream()
+                            .collect(Collectors.groupingBy(FoundShopItemModel::getRemainingStockOrSpace));
+                    List<Integer> stockLevels = new ArrayList<>(byStock.keySet());
+                    stockLevels.sort(Comparator.reverseOrder());
+                    for (int stock : stockLevels) {
+                        List<FoundShopItemModel> sameStock = new ArrayList<>(byStock.get(stock));
+                        Collections.shuffle(sameStock);
+                        finalList.addAll(sameStock);
+                    }
                 }
             } else {
-                // Sort the groups (item types)
                 List<Material> types = new ArrayList<>(grouped.keySet());
-                types.sort(Comparator.comparing(Enum::name)); // Alphabetical by type
-
+                types.sort(Comparator.comparing(Enum::name));
                 for (Material type : types) {
                     List<FoundShopItemModel> shops = grouped.get(type);
-                    // Sort within group, e.g. by price ascending
                     shops.sort(Comparator.comparingDouble(FoundShopItemModel::getShopPrice));
                     finalList.addAll(shops);
                 }
@@ -815,7 +798,6 @@ public class CmdExecutorHandler {
 
             sortShopsByNearbyWarp(unbreakableItems, player);
             if (isBuying) {
-                Collections.shuffle(unbreakableItems);
                 openShopMenu(player, unbreakableItems, true, "&cNo shops found selling unbreakable items!", originCommand, true);
             } else {
                 unbreakableItems.sort(

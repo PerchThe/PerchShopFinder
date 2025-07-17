@@ -26,7 +26,6 @@ public class WhereToSellCommand implements CommandExecutor {
     private final CmdExecutorHandler cmdExecutor;
     private final String sellCommand;
 
-    // --- Friendly name map for potion effects (ALL UPPERCASE) ---
     private static final Map<String, PotionEffectType> FRIENDLY_POTION_EFFECTS = buildFriendlyPotionEffectMap();
 
     private static Map<String, PotionEffectType> buildFriendlyPotionEffectMap() {
@@ -62,13 +61,12 @@ public class WhereToSellCommand implements CommandExecutor {
         map.put("GLOW", PotionEffectType.getByName("GLOWING"));
         map.put("BLINDNESS", PotionEffectType.getByName("BLINDNESS"));
         map.put("OOZING", PotionEffectType.getByName("OOZING"));
-        map.put("INFESTATION", PotionEffectType.getByName("INFESTED")); // or "INFESTATION" if that's the API name
+        map.put("INFESTATION", PotionEffectType.getByName("INFESTED"));
         map.put("WEAVING", PotionEffectType.getByName("WEAVING"));
         map.put("WINDCHARGING", PotionEffectType.getByName("WIND_CHARGED"));
-        map.put("TURTLEMASTER", PotionEffectType.getByName("DAMAGE_RESISTANCE")); // or SLOW, or both
+        map.put("TURTLEMASTER", PotionEffectType.getByName("DAMAGE_RESISTANCE"));
         map.put("NAUSEA", PotionEffectType.getByName("CONFUSION"));
         map.put("CONFUSION", PotionEffectType.getByName("CONFUSION"));
-        // Add more as needed
         return map;
     }
 
@@ -91,7 +89,6 @@ public class WhereToSellCommand implements CommandExecutor {
             return true;
         }
 
-        // If no arguments, run /wtsmenu as the player and return
         if (args.length == 0) {
             Bukkit.getScheduler().runTask(JavaPlugin.getProvidingPlugin(getClass()), () -> {
                 player.sendMessage(ColorTranslator.translateColorCodes("&cInvalid item, redirecting to menu."));
@@ -100,7 +97,6 @@ public class WhereToSellCommand implements CommandExecutor {
             return true;
         }
 
-        // Special argument handling for first arg
         String firstArg = args[0];
         if (firstArg.equalsIgnoreCase("inv")) {
             cmdExecutor.handleShopSearchForInventory(sellCommand, player);
@@ -115,7 +111,6 @@ public class WhereToSellCommand implements CommandExecutor {
                         FindItemAddOn.getConfigProvider().PLUGIN_PREFIX + "&cYou are not holding any item!"));
                 return true;
             }
-            // Replace first arg with the item in hand, keep the rest
             searchArgs[0] = handMat.name();
         }
 
@@ -129,16 +124,14 @@ public class WhereToSellCommand implements CommandExecutor {
                 boolean isSelling = sellCommand.equalsIgnoreCase("TO_SELL") ||
                         sellCommand.equalsIgnoreCase(FindItemAddOn.getConfigProvider().FIND_ITEM_TO_SELL_AUTOCOMPLETE);
 
-                // For selling, fetch all items shops are buying (isSelling = true)
                 List<FoundShopItemModel> allItems = (List<FoundShopItemModel>) FindItemAddOn.getQsApiInstance()
-                        .fetchAllItemsFromAllShops(isSelling, player);
+                        .fetchAllItemsFromAllShops(!isSelling, player);
 
                 Bukkit.getScheduler().runTask(JavaPlugin.getProvidingPlugin(getClass()), () -> {
                     if (allItems.isEmpty()) {
                         player.sendMessage(ColorTranslator.translateColorCodes("&cNo items found to sell."));
                         player.performCommand("wtsmenu");
                     } else {
-                        // --- SORT: by item type (alphabetically), then by price (descending) ---
                         allItems.sort(
                                 Comparator.comparing((FoundShopItemModel m) -> m.getItem().getType().name())
                                         .thenComparing(Comparator.comparingDouble(FoundShopItemModel::getShopPrice).reversed())
@@ -153,7 +146,6 @@ public class WhereToSellCommand implements CommandExecutor {
         boolean isSelling = sellCommand.equalsIgnoreCase("TO_SELL") ||
                 sellCommand.equalsIgnoreCase(FindItemAddOn.getConfigProvider().FIND_ITEM_TO_SELL_AUTOCOMPLETE);
 
-        // --- Run the shop search async, even for a single item! ---
         Bukkit.getScheduler().runTaskAsynchronously(JavaPlugin.getProvidingPlugin(getClass()), () -> {
             ShopSearchResult result = new ShopSearchResult();
 
@@ -161,7 +153,6 @@ public class WhereToSellCommand implements CommandExecutor {
                 singleItem = singleItem.trim();
                 if (singleItem.isEmpty()) continue;
 
-                // --- Lore search support (explicit option) ---
                 if (singleItem.toLowerCase().startsWith("lore:")) {
                     result.anyValid = true;
                     String loreSearch = singleItem.substring(5).toLowerCase();
@@ -187,7 +178,6 @@ public class WhereToSellCommand implements CommandExecutor {
                     continue;
                 }
 
-                // Enchantment support
                 Enchantment enchantment = getEnchantmentByName(singleItem);
                 if (enchantment != null) {
                     result.anyValid = true;
@@ -208,7 +198,6 @@ public class WhereToSellCommand implements CommandExecutor {
                     continue;
                 }
 
-                // Potion effect support
                 PotionEffectType effect = getPotionEffectByName(singleItem);
                 if (effect != null) {
                     result.anyValid = true;
@@ -241,7 +230,6 @@ public class WhereToSellCommand implements CommandExecutor {
                     continue;
                 }
 
-                // Material or display name support
                 Material mat = Material.getMaterial(singleItem.toUpperCase());
                 if (mat != null && mat.isItem()) {
                     result.anyValid = true;
@@ -257,7 +245,6 @@ public class WhereToSellCommand implements CommandExecutor {
                 }
             }
 
-            // Call the handler method on the main thread
             Bukkit.getScheduler().runTask(JavaPlugin.getProvidingPlugin(getClass()), () -> {
                 handleShopResults(player, result);
             });
@@ -266,13 +253,11 @@ public class WhereToSellCommand implements CommandExecutor {
         return true;
     }
 
-    // Holder class for async result
     private static class ShopSearchResult {
         boolean anyValid = false;
         List<FoundShopItemModel> allResults = new ArrayList<>();
     }
 
-    // New method to handle the results on the main thread
     private void handleShopResults(Player player, ShopSearchResult result) {
         if (!result.anyValid) {
             player.sendMessage(ColorTranslator.translateColorCodes("&cInvalid item, redirecting to menu."));
@@ -282,7 +267,6 @@ public class WhereToSellCommand implements CommandExecutor {
         }
     }
 
-    // Utility method to map user input to Bukkit Enchantment
     private static Enchantment getEnchantmentByName(String name) {
         String key = name.toLowerCase().replace("_", "").replace(" ", "");
         for (Enchantment ench : Enchantment.values()) {
@@ -294,14 +278,11 @@ public class WhereToSellCommand implements CommandExecutor {
         return null;
     }
 
-    // Utility method to map user input to Bukkit PotionEffectType, including friendly names (ALL UPPERCASE)
     private static PotionEffectType getPotionEffectByName(String name) {
         String key = name.toUpperCase().replace("_", "").replace(" ", "");
-        // Check friendly names first
         if (FRIENDLY_POTION_EFFECTS.containsKey(key)) {
             return FRIENDLY_POTION_EFFECTS.get(key);
         }
-        // Fallback to Bukkit's names
         for (PotionEffectType effect : PotionEffectType.values()) {
             if (effect == null) continue;
             String effectKey = effect.getName().toUpperCase().replace("_", "").replace(" ", "");
