@@ -243,7 +243,6 @@ public class WhereToBuyCommand implements CommandExecutor {
                     continue;
                 }
 
-                // --- Special case: /wtb tags or /wtb tag shows only renamed name tags ---
                 if (singleItem.equalsIgnoreCase("tags") || singleItem.equalsIgnoreCase("tag")) {
                     result.anyValid = true;
                     List<FoundShopItemModel> allNameTags = (List<FoundShopItemModel>) FindItemAddOn.getQsApiInstance()
@@ -257,6 +256,7 @@ public class WhereToBuyCommand implements CommandExecutor {
                             .collect(Collectors.toList());
 
                     result.allResults.addAll(renamedTags);
+                    result.originCommand = "wtb_tags";
                     continue;
                 }
 
@@ -300,6 +300,7 @@ public class WhereToBuyCommand implements CommandExecutor {
     private static class ShopSearchResult {
         boolean anyValid = false;
         List<FoundShopItemModel> allResults = new ArrayList<>();
+        String originCommand = "wtbmenu"; // default
     }
 
     // New method to handle the results on the main thread
@@ -309,7 +310,7 @@ public class WhereToBuyCommand implements CommandExecutor {
             player.performCommand("wtbmenu");
         } else {
             if (isBuying) {
-                cmdExecutor.openShopMenu(player, result.allResults, false, FindItemAddOn.getConfigProvider().NO_SHOP_FOUND_MSG, "wtbmenu", true);
+                cmdExecutor.openShopMenu(player, result.allResults, false, FindItemAddOn.getConfigProvider().NO_SHOP_FOUND_MSG, result.originCommand, true);
             } else {
                 cmdExecutor.openShopMenuDescending(player, result.allResults, false, FindItemAddOn.getConfigProvider().NO_SHOP_FOUND_MSG, "wtsmenu");
             }

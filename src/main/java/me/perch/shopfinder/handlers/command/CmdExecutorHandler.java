@@ -70,6 +70,20 @@ public class CmdExecutorHandler {
         });
     }
 
+    /**
+     * Sorts a list of FoundShopItemModel alphabetically by the item's display name (case-insensitive).
+     * Items without a display name are sorted as empty string ("").
+     */
+    public static void sortByDisplayName(List<FoundShopItemModel> list) {
+        list.sort(Comparator.comparing(shopItem -> {
+            ItemStack item = shopItem.getItemStack();
+            if (item != null && item.hasItemMeta() && item.getItemMeta().hasDisplayName()) {
+                return item.getItemMeta().getDisplayName().toLowerCase();
+            }
+            return "";
+        }));
+    }
+
     public void handleShopSearch(String buySellSubCommand, CommandSender commandSender, String itemArg) {
         if (!(commandSender instanceof Player player)) {
             Logger.logInfo(THIS_COMMAND_CAN_ONLY_BE_RUN_FROM_IN_GAME);
@@ -429,38 +443,46 @@ public class CmdExecutorHandler {
 
     public void openShopMenu(Player player, List<FoundShopItemModel> searchResultList, boolean synchronize, String errorMsg, String originCommand, boolean isBuying) {
         if (!searchResultList.isEmpty()) {
-            Map<Material, List<FoundShopItemModel>> grouped = new HashMap<>();
-            for (FoundShopItemModel shop : searchResultList) {
-                ItemStack item = shop.getItemStack();
-                if (item != null) {
-                    grouped.computeIfAbsent(item.getType(), k -> new ArrayList<>()).add(shop);
-                }
-            }
+            List<FoundShopItemModel> finalList;
 
-            List<FoundShopItemModel> finalList = new ArrayList<>();
-
-            if (isBuying) {
-                List<Material> types = new ArrayList<>(grouped.keySet());
-                types.sort(Comparator.comparing(Enum::name));
-                for (Material type : types) {
-                    List<FoundShopItemModel> shops = grouped.get(type);
-                    Map<Integer, List<FoundShopItemModel>> byStock = shops.stream()
-                            .collect(Collectors.groupingBy(FoundShopItemModel::getRemainingStockOrSpace));
-                    List<Integer> stockLevels = new ArrayList<>(byStock.keySet());
-                    stockLevels.sort(Comparator.reverseOrder());
-                    for (int stock : stockLevels) {
-                        List<FoundShopItemModel> sameStock = new ArrayList<>(byStock.get(stock));
-                        Collections.shuffle(sameStock);
-                        finalList.addAll(sameStock);
+            // Special case: /wtb tags or /wtb tag
+            if ("wtb_tags".equalsIgnoreCase(originCommand)) {
+                sortByDisplayName(searchResultList);
+                finalList = new ArrayList<>(searchResultList);
+            } else {
+                Map<Material, List<FoundShopItemModel>> grouped = new HashMap<>();
+                for (FoundShopItemModel shop : searchResultList) {
+                    ItemStack item = shop.getItemStack();
+                    if (item != null) {
+                        grouped.computeIfAbsent(item.getType(), k -> new ArrayList<>()).add(shop);
                     }
                 }
-            } else {
-                List<Material> types = new ArrayList<>(grouped.keySet());
-                types.sort(Comparator.comparing(Enum::name));
-                for (Material type : types) {
-                    List<FoundShopItemModel> shops = grouped.get(type);
-                    shops.sort(Comparator.comparingDouble(FoundShopItemModel::getShopPrice));
-                    finalList.addAll(shops);
+
+                finalList = new ArrayList<>();
+
+                if (isBuying) {
+                    List<Material> types = new ArrayList<>(grouped.keySet());
+                    types.sort(Comparator.comparing(Enum::name));
+                    for (Material type : types) {
+                        List<FoundShopItemModel> shops = grouped.get(type);
+                        Map<Integer, List<FoundShopItemModel>> byStock = shops.stream()
+                                .collect(Collectors.groupingBy(FoundShopItemModel::getRemainingStockOrSpace));
+                        List<Integer> stockLevels = new ArrayList<>(byStock.keySet());
+                        stockLevels.sort(Comparator.reverseOrder());
+                        for (int stock : stockLevels) {
+                            List<FoundShopItemModel> sameStock = new ArrayList<>(byStock.get(stock));
+                            Collections.shuffle(sameStock);
+                            finalList.addAll(sameStock);
+                        }
+                    }
+                } else {
+                    List<Material> types = new ArrayList<>(grouped.keySet());
+                    types.sort(Comparator.comparing(Enum::name));
+                    for (Material type : types) {
+                        List<FoundShopItemModel> shops = grouped.get(type);
+                        shops.sort(Comparator.comparingDouble(FoundShopItemModel::getShopPrice));
+                        finalList.addAll(shops);
+                    }
                 }
             }
 
