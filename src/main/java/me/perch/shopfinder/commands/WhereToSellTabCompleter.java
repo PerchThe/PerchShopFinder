@@ -176,6 +176,8 @@ public class WhereToSellTabCompleter implements TabCompleter {
         if ("unbreakable".startsWith(toComplete)) completions.add("unbreakable");
         if ("claimblocks".startsWith(toComplete)) completions.add("claim");
         if ("playtime".startsWith(toComplete)) completions.add("playtime");
+        if ("tags".startsWith(toComplete)) completions.add("tags");
+        if ("tag".startsWith(toComplete)) completions.add("tag");
         if ("*".startsWith(toComplete)) completions.add("*");
 
         // Enchantment book names

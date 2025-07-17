@@ -175,6 +175,8 @@ public class WhereToBuyTabCompleter implements TabCompleter {
         if ("key".startsWith(toComplete)) completions.add("key");
         if ("claimblocks".startsWith(toComplete)) completions.add("claim");
         if ("playtime".startsWith(toComplete)) completions.add("playtime");
+        if ("tags".startsWith(toComplete)) completions.add("tags");
+        if ("tag".startsWith(toComplete)) completions.add("tag");
         if ("*".startsWith(toComplete)) completions.add("*");
 
         // Enchantment book names

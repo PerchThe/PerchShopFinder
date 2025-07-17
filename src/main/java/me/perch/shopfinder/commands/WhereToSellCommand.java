@@ -230,11 +230,41 @@ public class WhereToSellCommand implements CommandExecutor {
                     continue;
                 }
 
+                // --- Special case: /wts tags or /wts tag shows only renamed name tags ---
+                if (singleItem.equalsIgnoreCase("tags") || singleItem.equalsIgnoreCase("tag")) {
+                    result.anyValid = true;
+                    List<FoundShopItemModel> allNameTags = (List<FoundShopItemModel>) FindItemAddOn.getQsApiInstance()
+                            .findItemBasedOnTypeFromAllShops(new ItemStack(Material.NAME_TAG), !isSelling, player);
+
+                    List<FoundShopItemModel> renamedTags = allNameTags.stream()
+                            .filter(shopItem -> {
+                                ItemStack item = shopItem.getItemStack();
+                                return item != null && item.getType() == Material.NAME_TAG && item.hasItemMeta() && item.getItemMeta().hasDisplayName();
+                            })
+                            .collect(Collectors.toList());
+
+                    result.allResults.addAll(renamedTags);
+                    continue;
+                }
+
+                // --- Material or display name support ---
                 Material mat = Material.getMaterial(singleItem.toUpperCase());
                 if (mat != null && mat.isItem()) {
                     result.anyValid = true;
-                    result.allResults.addAll((List<FoundShopItemModel>) FindItemAddOn.getQsApiInstance()
-                            .findItemBasedOnTypeFromAllShops(new ItemStack(mat), !isSelling, player));
+                    List<FoundShopItemModel> foundItems = (List<FoundShopItemModel>) FindItemAddOn.getQsApiInstance()
+                            .findItemBasedOnTypeFromAllShops(new ItemStack(mat), !isSelling, player);
+
+                    // If searching for NAME_TAG, filter out renamed ones (vanilla only)
+                    if (mat == Material.NAME_TAG) {
+                        foundItems = foundItems.stream()
+                                .filter(shopItem -> {
+                                    ItemStack item = shopItem.getItemStack();
+                                    return item != null && item.getType() == Material.NAME_TAG && (!item.hasItemMeta() || !item.getItemMeta().hasDisplayName());
+                                })
+                                .collect(Collectors.toList());
+                    }
+
+                    result.allResults.addAll(foundItems);
                 } else {
                     List<FoundShopItemModel> displayNameResults = (List<FoundShopItemModel>) FindItemAddOn.getQsApiInstance()
                             .findItemBasedOnDisplayNameFromAllShops(singleItem, !isSelling, player);
