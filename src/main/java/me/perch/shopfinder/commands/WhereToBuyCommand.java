@@ -260,6 +260,20 @@ public class WhereToBuyCommand implements CommandExecutor {
                     continue;
                 }
 
+                // --- SHULKER BOX: Add search for all colored shulker boxes ---
+                if (singleItem.equalsIgnoreCase("shulker_box")) {
+                    result.anyValid = true;
+                    List<Material> shulkerVariants = Arrays.stream(Material.values())
+                            .filter(m -> m.name().endsWith("_SHULKER_BOX"))
+                            .collect(Collectors.toList());
+                    for (Material variant : shulkerVariants) {
+                        List<FoundShopItemModel> variantMatches = (List<FoundShopItemModel>) FindItemAddOn.getQsApiInstance()
+                                .findItemBasedOnTypeFromAllShops(new ItemStack(variant), isBuying, player);
+                        result.allResults.addAll(variantMatches);
+                    }
+                    continue;
+                }
+
                 // --- Material or display name support ---
                 Material mat = Material.getMaterial(singleItem.toUpperCase());
                 if (mat != null && mat.isItem()) {
