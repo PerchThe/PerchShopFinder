@@ -61,13 +61,12 @@ public class WhereToBuyCommand implements CommandExecutor {
         map.put("GLOW", PotionEffectType.getByName("GLOWING"));
         map.put("BLINDNESS", PotionEffectType.getByName("BLINDNESS"));
         map.put("OOZING", PotionEffectType.getByName("OOZING"));
-        map.put("INFESTATION", PotionEffectType.getByName("INFESTATION"));
+        map.put("INFESTATION", PotionEffectType.getByName("INFESTED"));
         map.put("WEAVING", PotionEffectType.getByName("WEAVING"));
         map.put("WINDCHARGING", PotionEffectType.getByName("WIND_CHARGED"));
         map.put("TURTLEMASTER", PotionEffectType.getByName("DAMAGE_RESISTANCE"));
         map.put("NAUSEA", PotionEffectType.getByName("CONFUSION"));
         map.put("CONFUSION", PotionEffectType.getByName("CONFUSION"));
-        // Add more as needed
         return map;
     }
 
