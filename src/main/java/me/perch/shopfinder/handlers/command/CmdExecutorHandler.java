@@ -460,26 +460,27 @@ public class CmdExecutorHandler {
 
                 finalList = new ArrayList<>();
 
-            if (isBuying) {
-                // Shuffle the groups (item types)
-                List<Material> types = new ArrayList<>(grouped.keySet());
-                Collections.shuffle(types);
+                if (isBuying) {
+                    // Shuffle the groups (item types)
+                    List<Material> types = new ArrayList<>(grouped.keySet());
+                    Collections.shuffle(types);
 
-                for (Material type : types) {
-                    List<FoundShopItemModel> shops = grouped.get(type);
-                    Collections.shuffle(shops); // Shuffle within group
-                    finalList.addAll(shops);
-                }
-            } else {
-                // Sort the groups (item types)
-                List<Material> types = new ArrayList<>(grouped.keySet());
-                types.sort(Comparator.comparing(Enum::name)); // Alphabetical by type
+                    for (Material type : types) {
+                        List<FoundShopItemModel> shops = grouped.get(type);
+                        Collections.shuffle(shops); // Shuffle within group
+                        finalList.addAll(shops);
+                    }
+                } else {
+                    // Sort the groups (item types)
+                    List<Material> types = new ArrayList<>(grouped.keySet());
+                    types.sort(Comparator.comparing(Enum::name)); // Alphabetical by type
 
-                for (Material type : types) {
-                    List<FoundShopItemModel> shops = grouped.get(type);
-                    // Sort within group, e.g. by price ascending
-                    shops.sort(Comparator.comparingDouble(FoundShopItemModel::getShopPrice));
-                    finalList.addAll(shops);
+                    for (Material type : types) {
+                        List<FoundShopItemModel> shops = grouped.get(type);
+                        // Sort within group, e.g. by price ascending
+                        shops.sort(Comparator.comparingDouble(FoundShopItemModel::getShopPrice));
+                        finalList.addAll(shops);
+                    }
                 }
             }
 

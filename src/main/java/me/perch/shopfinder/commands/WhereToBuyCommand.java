@@ -260,12 +260,16 @@ public class WhereToBuyCommand implements CommandExecutor {
                     continue;
                 }
 
-                // --- SHULKER BOX: Add search for all colored shulker boxes ---
                 if (singleItem.equalsIgnoreCase("shulker_box")) {
                     result.anyValid = true;
                     List<Material> shulkerVariants = Arrays.stream(Material.values())
                             .filter(m -> m.name().endsWith("_SHULKER_BOX"))
                             .collect(Collectors.toList());
+
+                    if (!shulkerVariants.contains(Material.SHULKER_BOX)) {
+                        shulkerVariants.add(Material.SHULKER_BOX);
+                    }
+
                     for (Material variant : shulkerVariants) {
                         List<FoundShopItemModel> variantMatches = (List<FoundShopItemModel>) FindItemAddOn.getQsApiInstance()
                                 .findItemBasedOnTypeFromAllShops(new ItemStack(variant), isBuying, player);
@@ -273,6 +277,7 @@ public class WhereToBuyCommand implements CommandExecutor {
                     }
                     continue;
                 }
+
 
                 // --- Material or display name support ---
                 Material mat = Material.getMaterial(singleItem.toUpperCase());
