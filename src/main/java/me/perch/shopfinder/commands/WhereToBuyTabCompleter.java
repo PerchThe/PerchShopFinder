@@ -17,6 +17,8 @@ public class WhereToBuyTabCompleter implements TabCompleter {
     private final List<String> potionEffectNames;
     private static final Set<String> BLOCKED_TAB_ITEMS = Set.of(
             "PETRIFIED_OAK_SLAB",
+            "POTATOES",
+            "CARROTS",
             "POTTED_ACACIA_SAPLING",
             "POTTED_ALLIUM",
             "POTTED_AZALEA_BUSH",

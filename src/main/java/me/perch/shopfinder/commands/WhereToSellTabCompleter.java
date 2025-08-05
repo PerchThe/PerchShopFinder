@@ -18,6 +18,8 @@ public class WhereToSellTabCompleter implements TabCompleter {
     private static final Set<String> BLOCKED_TAB_ITEMS = Set.of(
             "PETRIFIED_OAK_SLAB",
             "POTTED_ACACIA_SAPLING",
+            "POTATOES",
+            "CARROTS",
             "POTTED_ALLIUM",
             "POTTED_AZALEA_BUSH",
             "POTTED_BAMBOO",
