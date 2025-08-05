@@ -58,3 +58,10 @@ commands:
   includewarp:
     description: Include your warp in all wtb searches
     usage: /includewarp <warpname>
+  highlightcolour:
+    description: Set your shop highlight colour
+    usage: /highlightcolour <colour>
+  wheretoget:
+    description: Highlights nearby shops selling an item
+    usage: /wheretoget <item>
+    aliases: [ wtg ]

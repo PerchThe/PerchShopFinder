@@ -29,12 +29,17 @@ import java.util.*;
 
 public class ShopHighlighter implements Listener {
 
-    private static final String TEAM_NAME = "shop_highlight_orange";
     private static final String PDC_KEY = "shop_highlight";
     private static final String HIGHLIGHT_SHULKER_NAME = "PerchShopFinderHighlight";
-    // Map<ChunkKey, Set<Shulker UUID>>
     private static final Map<String, Set<UUID>> chunkShulkerMap = new HashMap<>();
     private static Plugin pluginInstance;
+
+    // All valid Minecraft team colors + RAINBOW
+    private static final Set<String> SUPPORTED_COLOURS = Set.of(
+            "BLACK", "DARK_BLUE", "DARK_GREEN", "DARK_AQUA", "DARK_RED", "DARK_PURPLE",
+            "GOLD", "GRAY", "DARK_GRAY", "BLUE", "GREEN", "AQUA", "RED", "LIGHT_PURPLE",
+            "YELLOW", "WHITE", "RAINBOW"
+    );
 
     public static void init(Plugin plugin) {
         pluginInstance = plugin;
@@ -43,12 +48,15 @@ public class ShopHighlighter implements Listener {
         cleanupInvalidTeamEntries();
     }
 
-    public static void highlightShop(Location location, int durationTicks, Plugin plugin) {
+    public static void highlightShop(Location location, int durationTicks, Plugin plugin, String colour) {
         Set<Location> chestLocations = getChestLocations(location);
-
         for (Location chestLoc : chestLocations) {
-            highlightBlock(chestLoc, durationTicks, plugin);
+            highlightBlock(chestLoc, durationTicks, plugin, colour);
         }
+    }
+
+    public static void highlightShop(Location location, int durationTicks, Plugin plugin) {
+        highlightShop(location, durationTicks, plugin, "YELLOW");
     }
 
     private static Set<Location> getChestLocations(Location location) {
@@ -74,16 +82,10 @@ public class ShopHighlighter implements Listener {
         return locations;
     }
 
-    private static void highlightBlock(Location location, int durationTicks, Plugin plugin) {
+    private static void highlightBlock(Location location, int durationTicks, Plugin plugin, String colour) {
         // Remove any existing invisible glowing shulkers at this location
         location.getWorld().getNearbyEntities(location, 0.5, 1, 0.5).stream()
-                .filter(e -> {
-                    if (e instanceof Shulker) {
-                        Shulker shulker = (Shulker) e;
-                        return shulker.isGlowing() && shulker.isInvisible();
-                    }
-                    return false;
-                })
+                .filter(e -> e instanceof Shulker shulker && shulker.isGlowing() && shulker.isInvisible())
                 .forEach(Entity::remove);
 
         // Spawn a new invisible glowing shulker
@@ -95,9 +97,7 @@ public class ShopHighlighter implements Listener {
             s.setGlowing(true);
             s.setGravity(false);
             s.setCustomNameVisible(false);
-            // Tag with persistent data
             s.getPersistentDataContainer().set(getHighlightKey(), PersistentDataType.BYTE, (byte) 1);
-            // Set custom name for GPFlags bypass
             s.setCustomName(HIGHLIGHT_SHULKER_NAME);
         });
 
@@ -105,35 +105,127 @@ public class ShopHighlighter implements Listener {
         String chunkKey = getChunkKey(shulker.getLocation().getChunk());
         chunkShulkerMap.computeIfAbsent(chunkKey, k -> new HashSet<>()).add(shulker.getUniqueId());
 
-        // Assign the shulker to an orange team for orange glowing
-        Scoreboard scoreboard = Bukkit.getScoreboardManager().getMainScoreboard();
-        Team team = scoreboard.getTeam(TEAM_NAME);
-        if (team == null) {
-            team = scoreboard.registerNewTeam(TEAM_NAME);
-            team.setColor(ChatColor.GOLD);
-        }
-        final Team finalTeam = team;
-        final UUID shulkerUUID = shulker.getUniqueId();
+        // Rainbow logic
+        if ("RAINBOW".equalsIgnoreCase(colour)) {
+            List<String> rainbowColors = List.of(
+                    "RED", "GOLD", "YELLOW", "GREEN", "AQUA", "BLUE", "DARK_PURPLE", "LIGHT_PURPLE", "WHITE"
+            );
+            final int[] colorIndex = {0};
+            Scoreboard scoreboard = Bukkit.getScoreboardManager().getMainScoreboard();
 
-        finalTeam.addEntry(shulkerUUID.toString());
-
-        // Remove the shulker after the specified duration and clean up the team entry
-        new BukkitRunnable() {
-            @Override
-            public void run() {
-                if (!shulker.isDead()) {
-                    shulker.remove();
-                }
-                finalTeam.removeEntry(shulkerUUID.toString());
-                // Remove from tracking
-                String chunkKey = getChunkKey(shulker.getLocation().getChunk());
-                Set<UUID> set = chunkShulkerMap.get(chunkKey);
-                if (set != null) {
-                    set.remove(shulkerUUID);
-                    if (set.isEmpty()) chunkShulkerMap.remove(chunkKey);
-                }
+            // Assign to first team
+            String teamColor = rainbowColors.get(colorIndex[0]);
+            String teamName = "shop_highlight_" + teamColor.toLowerCase();
+            Team team = scoreboard.getTeam(teamName);
+            if (team == null) {
+                team = scoreboard.registerNewTeam(teamName);
             }
-        }.runTaskLater(plugin, durationTicks);
+            team.setColor(getChatColor(teamColor)); // Always set the color!
+            team.addEntry(shulker.getUniqueId().toString());
+
+            // Start a repeating task to cycle colors
+            BukkitRunnable rainbowTask = new BukkitRunnable() {
+                @Override
+                public void run() {
+                    // Remove from all highlight teams
+                    for (Team t : scoreboard.getTeams()) {
+                        if (t.getName().startsWith("shop_highlight_")) {
+                            t.removeEntry(shulker.getUniqueId().toString());
+                        }
+                    }
+                    // Add to next color team
+                    colorIndex[0] = (colorIndex[0] + 1) % rainbowColors.size();
+                    String nextColor = rainbowColors.get(colorIndex[0]);
+                    String nextTeamName = "shop_highlight_" + nextColor.toLowerCase();
+                    Team nextTeam = scoreboard.getTeam(nextTeamName);
+                    if (nextTeam == null) {
+                        nextTeam = scoreboard.registerNewTeam(nextTeamName);
+                    }
+                    nextTeam.setColor(getChatColor(nextColor)); // Always set the color!
+                    nextTeam.addEntry(shulker.getUniqueId().toString());
+                }
+            };
+            // Run every 10 ticks (0.5s)
+            rainbowTask.runTaskTimer(plugin, 10, 10);
+
+            // Remove the shulker after the specified duration and clean up the team entry and task
+            new BukkitRunnable() {
+                @Override
+                public void run() {
+                    rainbowTask.cancel();
+                    if (!shulker.isDead()) {
+                        shulker.remove();
+                    }
+                    for (Team t : scoreboard.getTeams()) {
+                        t.removeEntry(shulker.getUniqueId().toString());
+                    }
+                    Set<UUID> set = chunkShulkerMap.get(chunkKey);
+                    if (set != null) {
+                        set.remove(shulker.getUniqueId());
+                        if (set.isEmpty()) chunkShulkerMap.remove(chunkKey);
+                    }
+                }
+            }.runTaskLater(plugin, durationTicks);
+
+        } else {
+            // Normal color logic
+            String teamColor = getSupportedColour(colour);
+            String teamName = "shop_highlight_" + teamColor.toLowerCase();
+            Scoreboard scoreboard = Bukkit.getScoreboardManager().getMainScoreboard();
+            Team team = scoreboard.getTeam(teamName);
+            if (team == null) {
+                team = scoreboard.registerNewTeam(teamName);
+            }
+            team.setColor(getChatColor(teamColor)); // Always set the color!
+            final Team finalTeam = team;
+            final UUID shulkerUUID = shulker.getUniqueId();
+
+            finalTeam.addEntry(shulkerUUID.toString());
+
+            // Remove the shulker after the specified duration and clean up the team entry
+            new BukkitRunnable() {
+                @Override
+                public void run() {
+                    if (!shulker.isDead()) {
+                        shulker.remove();
+                    }
+                    finalTeam.removeEntry(shulkerUUID.toString());
+                    Set<UUID> set = chunkShulkerMap.get(chunkKey);
+                    if (set != null) {
+                        set.remove(shulkerUUID);
+                        if (set.isEmpty()) chunkShulkerMap.remove(chunkKey);
+                    }
+                }
+            }.runTaskLater(plugin, durationTicks);
+        }
+    }
+
+    // Only allow supported colors, default to YELLOW
+    private static String getSupportedColour(String colour) {
+        String upper = colour == null ? "YELLOW" : colour.toUpperCase();
+        return SUPPORTED_COLOURS.contains(upper) ? upper : "YELLOW";
+    }
+
+    private static ChatColor getChatColor(String colour) {
+        return switch (colour.toUpperCase()) {
+            case "BLACK" -> ChatColor.BLACK;
+            case "DARK_BLUE" -> ChatColor.DARK_BLUE;
+            case "DARK_GREEN" -> ChatColor.DARK_GREEN;
+            case "DARK_AQUA" -> ChatColor.DARK_AQUA;
+            case "DARK_RED" -> ChatColor.DARK_RED;
+            case "DARK_PURPLE" -> ChatColor.DARK_PURPLE;
+            case "GOLD" -> ChatColor.GOLD;
+            case "GRAY" -> ChatColor.GRAY;
+            case "DARK_GRAY" -> ChatColor.DARK_GRAY;
+            case "BLUE" -> ChatColor.BLUE;
+            case "GREEN" -> ChatColor.GREEN;
+            case "AQUA" -> ChatColor.AQUA;
+            case "RED" -> ChatColor.RED;
+            case "LIGHT_PURPLE" -> ChatColor.LIGHT_PURPLE;
+            case "YELLOW" -> ChatColor.YELLOW;
+            case "WHITE" -> ChatColor.WHITE;
+            default -> ChatColor.YELLOW;
+        };
     }
 
     private static String getChunkKey(Chunk chunk) {
@@ -146,13 +238,17 @@ public class ShopHighlighter implements Listener {
 
     @EventHandler
     public void onChunkUnload(ChunkUnloadEvent event) {
-        String chunkKey = getChunkKey(event.getChunk());
-        Set<UUID> shulkerSet = chunkShulkerMap.remove(chunkKey);
-        if (shulkerSet != null && !shulkerSet.isEmpty()) {
-            for (Entity entity : event.getChunk().getEntities()) {
-                if (entity instanceof Shulker && shulkerSet.contains(entity.getUniqueId())) {
-                    entity.remove();
-                    removeFromTeam((Shulker) entity);
+        for (Team team : Bukkit.getScoreboardManager().getMainScoreboard().getTeams()) {
+            if (team.getName().startsWith("shop_highlight_")) {
+                String chunkKey = getChunkKey(event.getChunk());
+                Set<UUID> shulkerSet = chunkShulkerMap.remove(chunkKey);
+                if (shulkerSet != null && !shulkerSet.isEmpty()) {
+                    for (Entity entity : event.getChunk().getEntities()) {
+                        if (entity instanceof Shulker && shulkerSet.contains(entity.getUniqueId())) {
+                            entity.remove();
+                            team.removeEntry(entity.getUniqueId ().toString());
+                        }
+                    }
                 }
             }
         }
@@ -165,7 +261,7 @@ public class ShopHighlighter implements Listener {
             if (entity instanceof Shulker shulker) {
                 if (shulker.getPersistentDataContainer().has(key, PersistentDataType.BYTE)) {
                     shulker.remove();
-                    removeFromTeam(shulker);
+                    removeFromAllTeams(shulker);
                 }
             }
         }
@@ -178,40 +274,41 @@ public class ShopHighlighter implements Listener {
 
     public static void cleanupInvalidTeamEntries() {
         Scoreboard scoreboard = Bukkit.getScoreboardManager().getMainScoreboard();
-        Team team = scoreboard.getTeam(TEAM_NAME);
-        if (team == null) return;
-
-        Set<String> toRemove = new HashSet<>();
-        for (String entry : team.getEntries()) {
-            try {
-                UUID uuid = UUID.fromString(entry);
-                boolean found = false;
-                for (World world : Bukkit.getWorlds()) {
-                    for (Entity entity : world.getEntities()) {
-                        if (entity.getUniqueId().equals(uuid) && entity instanceof Shulker) {
-                            found = true;
-                            break;
+        for (Team team : scoreboard.getTeams()) {
+            if (!team.getName().startsWith("shop_highlight_")) continue;
+            Set<String> toRemove = new HashSet<>();
+            for (String entry : team.getEntries()) {
+                try {
+                    UUID uuid = UUID.fromString(entry);
+                    boolean found = false;
+                    for (World world : Bukkit.getWorlds()) {
+                        for (Entity entity : world.getEntities()) {
+                            if (entity.getUniqueId().equals(uuid) && entity instanceof Shulker) {
+                                found = true;
+                                break;
+                            }
                         }
+                        if (found) break;
                     }
-                    if (found) break;
+                    if (!found) {
+                        toRemove.add(entry);
+                    }
+                } catch (IllegalArgumentException ignored) {
+                    // Not a UUID, probably a player name, ignore
                 }
-                if (!found) {
-                    toRemove.add(entry);
-                }
-            } catch (IllegalArgumentException ignored) {
-                // Not a UUID, probably a player name, ignore
             }
-        }
-        for (String entry : toRemove) {
-            team.removeEntry(entry);
+            for (String entry : toRemove) {
+                team.removeEntry(entry);
+            }
         }
     }
 
-    private static void removeFromTeam(Shulker shulker) {
+    private static void removeFromAllTeams(Shulker shulker) {
         Scoreboard scoreboard = Bukkit.getScoreboardManager().getMainScoreboard();
-        Team team = scoreboard.getTeam(TEAM_NAME);
-        if (team != null) {
-            team.removeEntry(shulker.getUniqueId().toString());
+        for (Team team : scoreboard.getTeams()) {
+            if (team.getName().startsWith("shop_highlight_")) {
+                team.removeEntry(shulker.getUniqueId().toString());
+            }
         }
     }
 }

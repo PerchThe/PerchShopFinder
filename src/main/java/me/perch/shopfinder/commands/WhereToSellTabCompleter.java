@@ -15,11 +15,156 @@ public class WhereToSellTabCompleter implements TabCompleter {
     private final List<String> itemsList;
     private final List<String> enchantBookNames;
     private final List<String> potionEffectNames;
-
-    // --- Blocked items for tab completion (add more as needed) ---
     private static final Set<String> BLOCKED_TAB_ITEMS = Set.of(
-            // ... (same as before, omitted for brevity) ...
-            "PETRIFIED_OAK_SLAB"
+            "PETRIFIED_OAK_SLAB",
+            "POTTED_ACACIA_SAPLING",
+            "POTTED_ALLIUM",
+            "POTTED_AZALEA_BUSH",
+            "POTTED_BAMBOO",
+            "POTTED_AZURE_BLUET",
+            "POTTED_BIRCH_SAPLING",
+            "POTTED_BLUE_ORCHID",
+            "POTTED_BROWN_MUSHROOM",
+            "POTTED_CACTUS",
+            "POTTED_CHERRY_SAPLING",
+            "POTTED_CLOSED_EYEBLOSSOM",
+            "POTTED_CORNFLOWER",
+            "POTTED_CRIMSON_FUNGUS",
+            "POTTED_CRIMSON_ROOTS",
+            "POTTED_DANDELION",
+            "POTTED_DARK_OAK_SAPLING",
+            "POTTED_DEAD_BUSH",
+            "POTTED_FERN",
+            "POTTED_FLOWERING_AZALEA_BUSH",
+            "POTTED_JUNGLE_SAPLING",
+            "POTTED_LILY_OF_THE_VALLEY",
+            "POTTED_MANGROVE_PROPAGULE",
+            "POTTED_OAK_SAPLING",
+            "POTTED_OPEN_EYEBLOSSOM",
+            "POTTED_ORANGE_TULIP",
+            "POTTED_OXEYE_DAISY",
+            "POTTED_PALE_OAK_SAPLING",
+            "POTTED_PINK_TULIP",
+            "POTTED_POPPY",
+            "POTTED_RED_MUSHROOM",
+            "POTTED_RED_TULIP",
+            "POTTED_SPRUCE_SAPLING",
+            "POTTED_TORCHFLOWER",
+            "POTTED_WARPED_FUNGUS",
+            "POTTED_WARPED_ROOTS",
+            "POTTED_WHITE_TULIP",
+            "POTTED_WITHER_ROSE",
+            "TUBE_CORAL_WALL_FAN",
+            "FIRE_CORAL_WALL_FAN",
+            "HORN_CORAL_WALL_FAN",
+            "BRAIN_CORAL_WALL_FAN",
+            "BUBBLE_CORAL_WALL_FAN",
+            "DEAD_TUBE_CORAL_WALL_FAN",
+            "DEAD_FIRE_CORAL_WALL_FAN",
+            "DEAD_HORN_CORAL_WALL_FAN",
+            "DEAD_BRAIN_CORAL_WALL_FAN",
+            "DEAD_BUBBLE_CORAL_WALL_FAN",
+            "RED_WALL_BANNER",
+            "LIME_WALL_BANNER",
+            "PINK_WALL_BANNER",
+            "GRAY_WALL_BANNER",
+            "CYAN_WALL_BANNER",
+            "BLUE_WALL_BANNER",
+            "WHITE_WALL_BANNER",
+            "BROWN_WALL_BANNER",
+            "GREEN_WALL_BANNER",
+            "BLACK_WALL_BANNER",
+            "ORANGE_WALL_BANNER",
+            "YELLOW_WALL_BANNER",
+            "PURPLE_WALL_BANNER",
+            "MAGENTA_WALL_BANNER",
+            "LIGHT_BLUE_WALL_BANNER",
+            "LIGHT_GRAY_WALL_BANNER",
+            "OAK_WALL_SIGN",
+            "BIRCH_WALL_SIGN",
+            "SPRUCE_WALL_SIGN",
+            "ACACIA_WALL_SIGN",
+            "JUNGLE_WALL_SIGN",
+            "WARPED_WALL_SIGN",
+            "DARK_OAK_WALL_SIGN",
+            "CRIMSON_WALL_SIGN",
+            "BAMBOO_WALL_SIGN",
+            "MANGROVE_WALL_SIGN",
+            "CHERRY_WALL_SIGN",
+            "PALE_OAK_WALL_SIGN",
+            "OAK_WALL_HANGING_SIGN",
+            "BIRCH_WALL_HANGING_SIGN",
+            "SPRUCE_WALL_HANGING_SIGN",
+            "ACACIA_WALL_HANGING_SIGN",
+            "JUNGLE_WALL_HANGING_SIGN",
+            "WARPED_WALL_HANGING_SIGN",
+            "DARK_OAK_WALL_HANGING_SIGN",
+            "CRIMSON_WALL_HANGING_SIGN",
+            "BAMBOO_WALL_HANGING_SIGN",
+            "MANGROVE_WALL_HANGING_SIGN",
+            "CHERRY_WALL_HANGING_SIGN",
+            "PALE_OAK_WALL_HANGING_SIGN",
+            "PISTON_HEAD",
+            "MOVING_PISTON",
+            "TRIPWIRE",
+            "REDSTONE_WIRE",
+            "WALL_TORCH",
+            "REDSTONE_WALL_TORCH",
+            "SOUL_WALL_TORCH",
+            "SKELETON_WALL_SKULL",
+            "WITHER_SKELETON_WALL_SKULL",
+            "ZOMBIE_WALL_HEAD",
+            "CREEPER_WALL_HEAD",
+            "PLAYER_WALL_HEAD",
+            "PIGLIN_WALL_HEAD",
+            "DRAGON_WALL_HEAD",
+            "VOID_AIR",
+            "AIR",
+            "CAVE_AIR",
+            "SPAWNER",
+            "BUBBLE_COLUMN",
+            "KNOWLEDGE_BOOK",
+            "FIRE",
+            "SOUL_FIRE",
+            "RED_CANDLE_CAKE",
+            "LIME_CANDLE_CAKE",
+            "PINK_CANDLE_CAKE",
+            "GRAY_CANDLE_CAKE",
+            "CYAN_CANDLE_CAKE",
+            "BLUE_CANDLE_CAKE",
+            "WHITE_CANDLE_CAKE",
+            "BROWN_CANDLE_CAKE",
+            "GREEN_CANDLE_CAKE",
+            "BLACK_CANDLE_CAKE",
+            "ORANGE_CANDLE_CAKE",
+            "YELLOW_CANDLE_CAKE",
+            "PURPLE_CANDLE_CAKE",
+            "MAGENTA_CANDLE_CAKE",
+            "LIGHT_BLUE_CANDLE_CAKE",
+            "LIGHT_GRAY_CANDLE_CAKE",
+            "FARMLAND",
+            "DIRT_PATH",
+            "ATTACHED_MELON_STEM",
+            "ATTACHED_PUMPKIN_STEM",
+            "INFESTED_STONE",
+            "INFESTED_COBBLESTONE",
+            "INFESTED_STONE_BRICKS",
+            "INFESTED_MOSSY_STONE_BRICKS",
+            "INFESTED_CRACKED_STONE_BRICKS",
+            "INFESTED_CHISELED_STONE_BRICKS",
+            "INFESTED_DEEPSLATE",
+            "NETHER_PORTAL",
+            "END_PORTAL",
+            "END_PORTAL_FRAME",
+            "WATER_CAULDRON",
+            "LAVA_CAULDRON",
+            "POWDER_SNOW_CAULDRON",
+            "BIG_DRIPLEAF_STEM",
+            "KELP_PLANT",
+            "CAVE_VINES",
+            "CAVE_VINES_PLANT",
+            "TWISTING_VINES_PLANT",
+            "WEEPING_VINES_PLANT"
     );
 
     private static final Map<String, String> FRIENDLY_POTION_EFFECT_NAMES = buildFriendlyPotionEffectNameMap();
@@ -78,10 +223,7 @@ public class WhereToSellTabCompleter implements TabCompleter {
                 itemsList.add(mat.name());
             }
         }
-        // Build enchantment book names
         enchantBookNames = buildEnchantmentBookNames();
-
-        // Build potion effect names (friendly + Bukkit names, uppercase, no spaces)
         potionEffectNames = buildPotionEffectNames();
     }
 
@@ -126,7 +268,6 @@ public class WhereToSellTabCompleter implements TabCompleter {
         special.put("QUICK_CHARGE", "QUICKCHARGE");
         special.put("MENDING", "MENDING");
         special.put("VANISHING_CURSE", "CURSEOFVANISHING");
-        // Add more as needed
 
         Set<String> names = new LinkedHashSet<>();
         for (Enchantment ench : Enchantment.values()) {
@@ -139,15 +280,12 @@ public class WhereToSellTabCompleter implements TabCompleter {
 
     private List<String> buildPotionEffectNames() {
         Set<String> names = new LinkedHashSet<>();
-        // Add all friendly names (aliases and potion types)
         names.addAll(FRIENDLY_POTION_EFFECT_NAMES.keySet());
-        // Add all Bukkit effect names (uppercased, no spaces/underscores)
         for (PotionEffectType effect : PotionEffectType.values()) {
             if (effect == null) continue;
             String effectName = effect.getName().toUpperCase().replace("_", "").replace(" ", "");
             names.add(effectName);
         }
-        // Add potion types (for things like TURTLE_MASTER)
         try {
             Class<?> potionTypeClass = Class.forName("org.bukkit.potion.PotionType");
             for (Object type : (Object[]) potionTypeClass.getMethod("values").invoke(null)) {
@@ -155,7 +293,6 @@ public class WhereToSellTabCompleter implements TabCompleter {
                 names.add(typeName);
             }
         } catch (Exception ignored) {
-            // PotionType may not exist or may not be needed
         }
         return new ArrayList<>(names);
     }
@@ -181,17 +318,14 @@ public class WhereToSellTabCompleter implements TabCompleter {
         if ("*".startsWith(toComplete)) completions.add("*");
         if ("tracker".startsWith(toComplete)) completions.add("tracker");
 
-        // Enchantment book names
         completions.addAll(enchantBookNames.stream()
                 .filter(e -> e.toLowerCase().startsWith(toComplete))
                 .collect(Collectors.toList()));
 
-        // Potion effect names
         completions.addAll(potionEffectNames.stream()
                 .filter(e -> e.toLowerCase().startsWith(toComplete))
                 .collect(Collectors.toList()));
 
-        // Item names, skipping blocked and already added
         completions.addAll(itemsList.stream()
                 .filter(item -> item.toLowerCase().startsWith(toComplete))
                 .filter(item -> !BLOCKED_TAB_ITEMS.contains(item.toUpperCase()))

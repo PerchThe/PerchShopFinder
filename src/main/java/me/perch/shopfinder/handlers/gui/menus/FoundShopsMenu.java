@@ -36,6 +36,7 @@ import org.bukkit.inventory.meta.ItemMeta;
 import org.bukkit.persistence.PersistentDataType;
 import org.jetbrains.annotations.NotNull;
 import me.perch.shopfinder.utils.ShopHighlighter;
+import me.perch.shopfinder.utils.HighlightColourManager;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
@@ -47,21 +48,15 @@ public class FoundShopsMenu extends PaginatedMenu {
     public static final String SHOP_STOCK_UNKNOWN = "Unknown";
     private static final String NAMEDSPACE_KEY_LOCATION_DATA = "locationData";
     private final ConfigProvider configProvider;
-
-    // Track the shops shown on the current page, in slot order
     private final List<FoundShopItemModel> currentPageShops = new ArrayList<>();
-
-    // Track if this is a buy or sell menu
     private final boolean isBuying;
 
-    // Constructor with isBuying flag
     public FoundShopsMenu(PlayerMenuUtility playerMenuUtility, List<FoundShopItemModel> searchResult, boolean isBuying) {
         super(playerMenuUtility, searchResult);
         configProvider = FindItemAddOn.getConfigProvider();
         this.isBuying = isBuying;
     }
 
-    // Old constructor for backward compatibility (defaults to sell menu)
     public FoundShopsMenu(PlayerMenuUtility playerMenuUtility, List<FoundShopItemModel> searchResult) {
         this(playerMenuUtility, searchResult, false);
     }
@@ -84,13 +79,9 @@ public class FoundShopsMenu extends PaginatedMenu {
     public void handleMenu(@NotNull InventoryClickEvent event) {
         int slot = event.getSlot();
         Player player = (Player) event.getWhoClicked();
-
-        // Handle navigation buttons (prev, next, first, last page)
         if (handleNavigationClick(event, slot)) {
             return;
         }
-
-        // Close inventory if the close button (slot 0) is clicked
         if (slot == 0) {
             String origin = playerMenuUtility.getOriginCommand();
             if ("wtbmenu".equalsIgnoreCase(origin)) {
@@ -100,14 +91,10 @@ public class FoundShopsMenu extends PaginatedMenu {
             }
             return;
         }
-
-        // Ignore clicks on empty slots
         if (event.getCurrentItem() == null || event.getCurrentItem().getType().equals(Material.AIR)) {
             Logger.logDebugInfo(player.getName() + " just clicked on AIR!");
             return;
         }
-
-        // Only handle clicks in the shop item slots (9-44)
         if (slot >= 9 && slot < 45) {
             int shopIndex = slot - 9;
             if (shopIndex >= 0 && shopIndex < currentPageShops.size()) {
@@ -139,66 +126,52 @@ public class FoundShopsMenu extends PaginatedMenu {
         };
     }
 
-    // Receives the correct FoundShopItemModel directly
     private void handleShopItemClick(@NotNull InventoryClickEvent event, Player player, FoundShopItemModel foundShop) {
-        // For direct shop teleport
         if (configProvider.TP_PLAYER_DIRECTLY_TO_SHOP) {
             Location directShopLocation = foundShop.getShopLocation();
             handleDirectShopTeleport(player, directShopLocation);
-
-            // Highlight immediately (or after teleport delay, handled in handleDirectShopTeleport)
             if (!shouldApplyTeleportDelay(player) && directShopLocation != null) {
-                System.out.println("Highlighting at: " + directShopLocation + " Block: " + directShopLocation.getBlock().getType());
-                ShopHighlighter.highlightShop(directShopLocation, 600, FindItemAddOn.getInstance()); // 3 seconds
+                String colour = HighlightColourManager.getColour(player.getUniqueId());
+                ShopHighlighter.highlightShop(directShopLocation, 600, FindItemAddOn.getInstance(), colour);
             }
-            // If there's a delay, the highlight is triggered after teleport in handleDirectShopTeleport
-        }
-        // For warp teleport
-        else if (configProvider.TP_PLAYER_TO_NEAREST_WARP) {
+        } else if (configProvider.TP_PLAYER_TO_NEAREST_WARP) {
             String nearestWarp = getNearestWarpInfo(foundShop);
             handleWarpTeleport(player, nearestWarp);
-            // Highlight after 1.5 seconds (30 ticks)
             Location warpShopLocation = foundShop.getShopLocation();
             if (warpShopLocation != null) {
+                String colour = HighlightColourManager.getColour(player.getUniqueId());
                 Bukkit.getScheduler().runTaskLater(
                         FindItemAddOn.getInstance(),
-                        () -> ShopHighlighter.highlightShop(warpShopLocation, 600, FindItemAddOn.getInstance()),
-                        30L // 1.5 seconds
+                        () -> ShopHighlighter.highlightShop(warpShopLocation, 600, FindItemAddOn.getInstance(), colour),
+                        30L
                 );
             }
         }
-
         handleCustomCommands(player, foundShop.getShopLocation());
         player.closeInventory();
     }
 
-    // Accepts Location directly
     private void handleDirectShopTeleport(@NotNull Player player, Location shopLocation) {
         if (!player.hasPermission(PlayerPermsEnum.FINDITEM_SHOPTP.value())) {
             sendNoPermissionMessage(player);
             return;
         }
-
         if (shopLocation == null)
             return;
-
         UUID shopOwner = ShopSearchActivityStorageUtil.getShopOwnerUUID(shopLocation);
         if (player.getUniqueId().equals(shopOwner) && !PlayerPermsEnum.canPlayerTpToOwnShop(player)) {
             player.sendMessage(ColorTranslator.translateColorCodes(
                     configProvider.PLUGIN_PREFIX + configProvider.SHOP_TP_NO_PERMISSION_MSG));
             return;
         }
-
         Location locToTeleport = LocationUtils.findSafeLocationAroundShop(shopLocation, player);
         if (locToTeleport == null) {
             sendUnsafeAreaMessage(player);
             return;
         }
-
         ShopSearchActivityStorageUtil.addPlayerVisitEntryAsync(shopLocation, player);
         if (EssentialsXPlugin.isEnabled())
             EssentialsXPlugin.setLastLocation(player);
-
         if (shouldApplyTeleportDelay(player)) {
             long delay = Long.parseLong(configProvider.TP_DELAY_IN_SECONDS);
             String tpDelayMsg = configProvider.TP_DELAY_MESSAGE;
@@ -210,12 +183,12 @@ public class FoundShopsMenu extends PaginatedMenu {
                     FindItemAddOn.getInstance(),
                     () -> {
                         PaperLib.teleportAsync(player, locToTeleport, PlayerTeleportEvent.TeleportCause.PLUGIN);
-                        ShopHighlighter.highlightShop(shopLocation, 600, FindItemAddOn.getInstance()); // Highlight after delayed teleport
+                        String colour = HighlightColourManager.getColour(player.getUniqueId());
+                        ShopHighlighter.highlightShop(shopLocation, 600, FindItemAddOn.getInstance(), colour);
                     },
                     delay * 20);
         } else {
             PaperLib.teleportAsync(player, locToTeleport, PlayerTeleportEvent.TeleportCause.PLUGIN);
-            // Highlight is called in handleShopItemClick after teleport
         }
     }
 
@@ -230,7 +203,6 @@ public class FoundShopsMenu extends PaginatedMenu {
         }
     }
 
-    // Accepts Location directly
     private void handleCustomCommands(Player player, Location shopLocation) {
         if (configProvider.CUSTOM_CMDS_RUN_ENABLED && !configProvider.CUSTOM_CMDS_LIST.isEmpty()
                 && shopLocation != null) {
@@ -243,7 +215,6 @@ public class FoundShopsMenu extends PaginatedMenu {
 
     @Override
     public void setMenuItems(List<FoundShopItemModel> foundShops) {
-        // Top menu bar: slot 0 empty, slots 1-8 filled
         ItemStack filler = new ItemStack(Material.ORANGE_STAINED_GLASS_PANE);
         ItemMeta meta = filler.getItemMeta();
         if (meta != null) {
@@ -253,34 +224,25 @@ public class FoundShopsMenu extends PaginatedMenu {
         for (int i = 1; i <= 8; i++) {
             inventory.setItem(i, filler);
         }
-        // Slot 0 left empty (or set your own item if you want)
-
         addMenuBottomBar();
-
         currentPageShops.clear();
-
         if (foundShops == null || foundShops.isEmpty()) {
             return;
         }
-
         int maxItemsPerPage = MAX_ITEMS_PER_PAGE;
-        int shopItemSlot = 9; // Start at slot 9 (second row)
+        int shopItemSlot = 9;
         for (int guiSlotCounter = 0; guiSlotCounter < maxItemsPerPage && shopItemSlot < 45; guiSlotCounter++, shopItemSlot++) {
             index = maxItemsPerPage * page + guiSlotCounter;
             if (index >= foundShops.size()) {
                 break;
             }
-
             FoundShopItemModel foundShop = foundShops.get(index);
             if (foundShop == null) {
                 continue;
             }
-
             ItemStack item = createShopItem(foundShop);
             inventory.setItem(shopItemSlot, item);
-            currentPageShops.add(foundShop); // Track the shop for this slot
-
-            // --- GLOW IF FAVOURITE ---
+            currentPageShops.add(foundShop);
             if (configProvider.NEAREST_WARP_MODE == 2 && PlayerWarpsPlugin.getIsEnabled()) {
                 Player viewingPlayer = playerMenuUtility.getOwner();
                 Warp nearestWarp = PlayerWarpsUtil.findNearestWarp(
@@ -289,11 +251,10 @@ public class FoundShopsMenu extends PaginatedMenu {
                         foundShop.getShopOwner()
                 );
                 if (nearestWarp != null) {
-                    final int slot = shopItemSlot; // Fix for lambda variable capture
+                    final int slot = shopItemSlot;
                     PlayerWarpsPlugin.isFavourite(viewingPlayer, nearestWarp.getWarpName(), isFav -> {
                         if (isFav) {
                             ItemStack glowing = makeItemGlow(item.clone());
-                            // Update the item in the inventory (must be run on the main thread)
                             Bukkit.getScheduler().runTask(FindItemAddOn.getInstance(), () -> {
                                 inventory.setItem(slot, glowing);
                             });
@@ -310,22 +271,17 @@ public class FoundShopsMenu extends PaginatedMenu {
         if (meta == null) {
             meta = Bukkit.getItemFactory().getItemMeta(item.getType());
         }
-
         List<String> lore = new ArrayList<>();
         addItemLore(lore, foundShop);
-
         meta.setLore(lore);
         setLocationData(meta, foundShop);
-
         if (foundShop.getItem().getItemMeta().hasCustomModelData()) {
             meta.setCustomModelData(foundShop.getItem().getItemMeta().getCustomModelData());
         }
-
         item.setItemMeta(meta);
         return item;
     }
 
-    // --- GLOW UTILITY ---
     private ItemStack makeItemGlow(ItemStack item) {
         ItemMeta meta = item.getItemMeta();
         if (meta != null) {
@@ -346,8 +302,6 @@ public class FoundShopsMenu extends PaginatedMenu {
                 lore.add(ColorTranslator.translateColorCodes(line));
             }
         }
-
-        // Use different lore for buy/sell menus if available
         List<String> loreTemplate;
         if (isBuying && configProvider.SHOP_GUI_ITEM_LORE_BUY != null) {
             loreTemplate = configProvider.SHOP_GUI_ITEM_LORE_BUY;
@@ -356,7 +310,6 @@ public class FoundShopsMenu extends PaginatedMenu {
         } else {
             loreTemplate = configProvider.SHOP_GUI_ITEM_LORE;
         }
-
         for (String loreLine : loreTemplate) {
             if (loreLine.contains(ShopLorePlaceholdersEnum.NEAREST_WARP.value())) {
                 String nearestWarpInfo = getNearestWarpInfo(foundShop);
@@ -366,7 +319,6 @@ public class FoundShopsMenu extends PaginatedMenu {
                 lore.add(ColorTranslator.translateColorCodes(replaceLorePlaceholders(loreLine, foundShop)));
             }
         }
-
         if (configProvider.TP_PLAYER_DIRECTLY_TO_SHOP
                 && playerMenuUtility.getOwner().hasPermission(PlayerPermsEnum.FINDITEM_SHOPTP.value())) {
             lore.add(ColorTranslator.translateColorCodes(configProvider.CLICK_TO_TELEPORT_MSG));
@@ -375,7 +327,7 @@ public class FoundShopsMenu extends PaginatedMenu {
 
     private String getNearestWarpInfo(FoundShopItemModel foundShop) {
         int nearestWarpMode = configProvider.NEAREST_WARP_MODE;
-        Player viewingPlayer = playerMenuUtility.getOwner(); // This is the player viewing the menu
+        Player viewingPlayer = playerMenuUtility.getOwner();
         switch (nearestWarpMode) {
             case 1:
                 if (EssentialsXPlugin.isEnabled()) {
@@ -386,7 +338,6 @@ public class FoundShopsMenu extends PaginatedMenu {
                 break;
             case 2:
                 if (PlayerWarpsPlugin.getIsEnabled()) {
-                    // Pass the viewing player for filtering!
                     Warp nearestPlayerWarp = PlayerWarpsUtil.findNearestWarp(
                             foundShop.getShopLocation(),
                             viewingPlayer,
@@ -412,7 +363,6 @@ public class FoundShopsMenu extends PaginatedMenu {
     private void setLocationData(ItemMeta meta, FoundShopItemModel foundShop) {
         NamespacedKey key = new NamespacedKey(FindItemAddOn.getInstance(), NAMEDSPACE_KEY_LOCATION_DATA);
         String locData = "";
-
         if (configProvider.TP_PLAYER_DIRECTLY_TO_SHOP) {
             Location shopLoc = foundShop.getShopLocation();
             locData = String.format("%s,%d,%d,%d", shopLoc.getWorld().getName(), shopLoc.getBlockX(),
@@ -420,20 +370,11 @@ public class FoundShopsMenu extends PaginatedMenu {
         } else if (configProvider.TP_PLAYER_TO_NEAREST_WARP) {
             locData = getNearestWarpInfo(foundShop);
         }
-
         meta.getPersistentDataContainer().set(key, PersistentDataType.STRING, locData);
     }
 
-    /**
-     * Replaces all the placeholders in the Shop item lore in GUI
-     *
-     * @param text Line of lore
-     * @param shop Shop instance
-     * @return Line of lore replaced with placeholder values
-     */
     private @NotNull String replaceLorePlaceholders(String text, @NotNull FoundShopItemModel shop) {
         text = text.replace(ShopLorePlaceholdersEnum.ITEM_PRICE.value(), formatNumber(shop.getShopPrice()));
-
         if (text.contains(ShopLorePlaceholdersEnum.SHOP_STOCK.value())) {
             int stock = shop.getRemainingStockOrSpace();
             String stockText;
@@ -446,33 +387,25 @@ public class FoundShopsMenu extends PaginatedMenu {
             }
             text = text.replace(ShopLorePlaceholdersEnum.SHOP_STOCK.value(), stockText);
         }
-
         text = text.replace(ShopLorePlaceholdersEnum.SHOP_PER_ITEM_QTY.value(),
                 String.valueOf(shop.getItem().getAmount()));
-
         if (text.contains(ShopLorePlaceholdersEnum.SHOP_OWNER.value())) {
             OfflinePlayer shopOwner = Bukkit.getOfflinePlayer(shop.getShopOwner());
             String ownerName = shopOwner.getName() != null ? shopOwner.getName() : "Admin";
             text = text.replace(ShopLorePlaceholdersEnum.SHOP_OWNER.value(), ownerName);
         }
-
         if (text.contains(ShopLorePlaceholdersEnum.SHOP_LOCATION.value())) {
             Location loc = shop.getShopLocation();
             String locText = loc.getBlockX() + ", " + loc.getBlockY() + ", " + loc.getBlockZ();
             text = text.replace(ShopLorePlaceholdersEnum.SHOP_LOCATION.value(), locText);
         }
-
         text = text.replace(ShopLorePlaceholdersEnum.SHOP_WORLD.value(),
                 Objects.requireNonNull(shop.getShopLocation().getWorld()).getName());
-
         text = text.replace(ShopLorePlaceholdersEnum.SHOP_VISITS.value(),
                 String.valueOf(ShopSearchActivityStorageUtil.getPlayerVisitCount(shop.getShopLocation())));
-
-        // --- WARP RATING PLACEHOLDERS ---
         if (text.contains(ShopLorePlaceholdersEnum.WARP_AVG_RATING.value()) || text.contains(ShopLorePlaceholdersEnum.WARP_TOTAL_RATINGS.value())) {
             String warpName = null;
             if (PlayerWarpsPlugin.getIsEnabled() && FindItemAddOn.getConfigProvider().NEAREST_WARP_MODE == 2) {
-                // Use the menu owner as the player context
                 Player viewingPlayer = playerMenuUtility.getOwner();
                 Warp nearestWarp = PlayerWarpsUtil.findNearestWarp(
                         shop.getShopLocation(),
@@ -485,14 +418,11 @@ public class FoundShopsMenu extends PaginatedMenu {
             }
             double avg = (warpName != null) ? PlayerWarpsPlugin.getWarpAverageRating(warpName) : -1;
             int total = (warpName != null) ? PlayerWarpsPlugin.getWarpTotalRatings(warpName) : -1;
-
             String avgString = avg >= 0 ? String.format("%.2f", avg) : "N/A";
             String totalString = total >= 0 ? String.valueOf(total) : "N/A";
-
             text = text.replace(ShopLorePlaceholdersEnum.WARP_AVG_RATING.value(), avgString)
                     .replace(ShopLorePlaceholdersEnum.WARP_TOTAL_RATINGS.value(), "(" + totalString + " ratings)");
         }
-
         return text;
     }
 
@@ -530,7 +460,6 @@ public class FoundShopsMenu extends PaginatedMenu {
                 .replace(CustomCmdPlaceholdersEnum.SHOP_LOC_Z.value(), Double.toString(shopLoc.getZ()));
     }
 
-    // The following methods are unchanged from your original code
     private void sendNoPermissionMessage(Player player) {
         if (!StringUtils.isEmpty(configProvider.SHOP_TP_NO_PERMISSION_MSG)) {
             player.sendMessage(ColorTranslator.translateColorCodes(configProvider.PLUGIN_PREFIX

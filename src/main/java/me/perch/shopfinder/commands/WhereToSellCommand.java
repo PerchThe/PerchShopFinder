@@ -26,7 +26,11 @@ public class WhereToSellCommand implements CommandExecutor {
     private final CmdExecutorHandler cmdExecutor;
     private final String sellCommand;
 
+    // --- Friendly name map for potion effects (ALL UPPERCASE) ---
     private static final Map<String, PotionEffectType> FRIENDLY_POTION_EFFECTS = buildFriendlyPotionEffectMap();
+
+    // --- Book name to Enchantment map for robust matching ---
+    private static final Map<String, Enchantment> BOOK_NAME_TO_ENCHANTMENT = buildBookNameToEnchantmentMap();
 
     private static Map<String, PotionEffectType> buildFriendlyPotionEffectMap() {
         Map<String, PotionEffectType> map = new HashMap<>();
@@ -67,6 +71,25 @@ public class WhereToSellCommand implements CommandExecutor {
         map.put("TURTLEMASTER", PotionEffectType.getByName("DAMAGE_RESISTANCE"));
         map.put("NAUSEA", PotionEffectType.getByName("CONFUSION"));
         map.put("CONFUSION", PotionEffectType.getByName("CONFUSION"));
+        return map;
+    }
+
+    // --- Book name mapping for enchantments ---
+    private static Map<String, Enchantment> buildBookNameToEnchantmentMap() {
+        Map<String, String> special = new HashMap<>();
+        special.put("BINDING_CURSE", "CURSEOFBINDING");
+        special.put("VANISHING_CURSE", "CURSEOFVANISHING");
+        // Add more special cases as needed
+
+        Map<String, Enchantment> map = new HashMap<>();
+        for (Enchantment ench : Enchantment.values()) {
+            String key = ench.getKey().getKey().toUpperCase();
+            String bookName = special.getOrDefault(key, key.replace("_", ""));
+            map.put(bookName.toLowerCase(), ench);
+            // Add aliases for curse books
+            if (bookName.equals("CURSEOFBINDING")) map.put("bindingcurse", ench);
+            if (bookName.equals("CURSEOFVANISHING")) map.put("vanishingcurse", ench);
+        }
         return map;
     }
 
@@ -282,7 +305,24 @@ public class WhereToSellCommand implements CommandExecutor {
                                 })
                                 .collect(Collectors.toList());
                     }
-
+                    // If searching for paper, filter out renamed ones (vanilla only)
+                    if (mat == Material.PAPER) {
+                        foundItems = foundItems.stream()
+                                .filter(shopItem -> {
+                                    ItemStack item = shopItem.getItemStack();
+                                    return item != null && item.getType() == Material.PAPER && (!item.hasItemMeta() || !item.getItemMeta().hasDisplayName());
+                                })
+                                .collect(Collectors.toList());
+                    }
+                    // If searching for MAP, filter out renamed ones (vanilla only)
+                    if (mat == Material.MAP) {
+                        foundItems = foundItems.stream()
+                                .filter(shopItem -> {
+                                    ItemStack item = shopItem.getItemStack();
+                                    return item != null && item.getType() == Material.MAP && (!item.hasItemMeta() || !item.getItemMeta().hasDisplayName());
+                                })
+                                .collect(Collectors.toList());
+                    }
                     result.allResults.addAll(foundItems);
                 } else {
                     List<FoundShopItemModel> displayNameResults = (List<FoundShopItemModel>) FindItemAddOn.getQsApiInstance()
@@ -316,8 +356,14 @@ public class WhereToSellCommand implements CommandExecutor {
         }
     }
 
+    // Utility method to map user input to Bukkit Enchantment (now supports book names and aliases)
     private static Enchantment getEnchantmentByName(String name) {
         String key = name.toLowerCase().replace("_", "").replace(" ", "");
+        // Try book name mapping first
+        if (BOOK_NAME_TO_ENCHANTMENT.containsKey(key)) {
+            return BOOK_NAME_TO_ENCHANTMENT.get(key);
+        }
+        // Fallback to internal key and Bukkit name
         for (Enchantment ench : Enchantment.values()) {
             String enchKey = ench.getKey().getKey().toLowerCase().replace("_", "").replace(" ", "");
             if (enchKey.equals(key) || ench.getName().equalsIgnoreCase(name)) {
@@ -327,11 +373,14 @@ public class WhereToSellCommand implements CommandExecutor {
         return null;
     }
 
+    // Utility method to map user input to Bukkit PotionEffectType, including friendly names (ALL UPPERCASE)
     private static PotionEffectType getPotionEffectByName(String name) {
         String key = name.toUpperCase().replace("_", "").replace(" ", "");
+        // Check friendly names first
         if (FRIENDLY_POTION_EFFECTS.containsKey(key)) {
             return FRIENDLY_POTION_EFFECTS.get(key);
         }
+        // Fallback to Bukkit's names
         for (PotionEffectType effect : PotionEffectType.values()) {
             if (effect == null) continue;
             String effectKey = effect.getName().toUpperCase().replace("_", "").replace(" ", "");

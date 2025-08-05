@@ -14,6 +14,8 @@ public class ExcludedWarpsUtil {
     private static File file;
     private static YamlConfiguration config;
 
+
+
     // Call this ONCE in your plugin's onEnable()
     public static void init(Plugin plugin) {
         file = new File(plugin.getDataFolder(), "excluded-warps.yml");
@@ -31,6 +33,7 @@ public class ExcludedWarpsUtil {
             save();
         }
     }
+
 
     public static Set<String> getExcludedWarps() {
         if (config == null) return new HashSet<>(); // Not initialized yet

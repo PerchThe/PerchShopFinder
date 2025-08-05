@@ -19,10 +19,10 @@ import me.perch.shopfinder.listeners.PWPlayerWarpRemoveEventListener;
 import me.perch.shopfinder.listeners.PlayerCommandSendEventListener;
 import me.perch.shopfinder.listeners.PlayerJoinEventListener;
 import me.perch.shopfinder.listeners.PluginEnableEventListener;
-import me.perch.shopfinder.metrics.Metrics;
 import me.perch.shopfinder.quickshop.QSApi;
 import me.perch.shopfinder.quickshop.impl.QSHikariAPIHandler;
 import me.perch.shopfinder.scheduledtasks.Task15MinInterval;
+import me.perch.shopfinder.utils.HighlightColourManager;
 import me.perch.shopfinder.utils.enums.PlayerPermsEnum;
 import me.perch.shopfinder.utils.json.ShopSearchActivityStorageUtil;
 import me.perch.shopfinder.utils.log.Logger;
@@ -91,6 +91,8 @@ public final class FindItemAddOn extends JavaPlugin {
     @Override
     public void onEnable() {
 
+        HighlightColourManager.init(getDataFolder());
+
         // --- FIX: Initialize ExcludedWarpsUtil here ---
         ExcludedWarpsUtil.init(this);
 
@@ -139,12 +141,16 @@ public final class FindItemAddOn extends JavaPlugin {
         this.cmdExecutorHandler = new CmdExecutorHandler();
         getCommand("outofstock").setExecutor(new OutOfStockCommand(cmdExecutorHandler));
 
+
+
         initCommands();
 
         // Register /wheretobuy command and tab completer
         getCommand("wheretobuy").setExecutor(new WhereToBuyCommand());
         getCommand("wheretobuy").setTabCompleter(new WhereToBuyTabCompleter());
-
+        getCommand("highlightcolour").setExecutor(new HighlightColourCommand());
+        getCommand("wheretoget").setExecutor(new WhereToGetCommand());
+        getCommand("wheretoget").setTabCompleter(new WhereToBuyTabCompleter());
         getCommand("excludewarp").setExecutor(new ExcludeWarpCommand());
         getCommand("excludewarp").setTabCompleter(new ExcludeWarpCommand());
         getCommand("includewarp").setExecutor(new ExcludeWarpCommand());
