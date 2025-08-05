@@ -28,6 +28,7 @@ public class WhereToBuyTabCompleter implements TabCompleter {
             "LAVA",
             "WATER",
             "END_GATEWAY",
+            "BEDROCK",
             "POTTED_ACACIA_SAPLING",
             "POTTED_ALLIUM",
             "POTTED_AZALEA_BUSH",
