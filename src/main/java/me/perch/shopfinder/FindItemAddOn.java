@@ -19,6 +19,7 @@ import me.perch.shopfinder.listeners.PWPlayerWarpRemoveEventListener;
 import me.perch.shopfinder.listeners.PlayerCommandSendEventListener;
 import me.perch.shopfinder.listeners.PlayerJoinEventListener;
 import me.perch.shopfinder.listeners.PluginEnableEventListener;
+import me.perch.shopfinder.papi.PapiRegistrar; // <-- added
 import me.perch.shopfinder.quickshop.QSApi;
 import me.perch.shopfinder.quickshop.impl.QSHikariAPIHandler;
 import me.perch.shopfinder.scheduledtasks.Task15MinInterval;
@@ -28,7 +29,7 @@ import me.perch.shopfinder.utils.json.ShopSearchActivityStorageUtil;
 import me.perch.shopfinder.utils.log.Logger;
 import me.perch.shopfinder.utils.UpdateChecker;
 import me.perch.shopfinder.utils.ShopHighlighter;
-import me.perch.shopfinder.utils.ExcludedWarpsUtil; // <-- Make sure this is imported!
+import me.perch.shopfinder.utils.ExcludedWarpsUtil;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import me.kodysimpson.simpapi.colors.ColorTranslator;
@@ -62,7 +63,7 @@ public final class FindItemAddOn extends JavaPlugin {
     public static String serverVersion;
     private static final int BS_PLUGIN_METRIC_ID = 12382;
     private static final int SPIGOT_PLUGIN_ID = 95104;
-    private static final int REPEATING_TASK_SCHEDULE_MINS = 15*60*20;
+    private static final int REPEATING_TASK_SCHEDULE_MINS = 15*60*20; // 15 minutes in ticks
 
     @Getter
     private static ConfigProvider configProvider;
@@ -78,11 +79,14 @@ public final class FindItemAddOn extends JavaPlugin {
 
     private CmdExecutorHandler cmdExecutorHandler;
 
+    // --- added: dynamic PAPI registrar so placeholders survive PlugMan/PAPI reloads
+    private PapiRegistrar papiRegistrar;
+
     @Override
     public void onLoad() {
         Logger.logInfo("A Shop Search AddOn for QuickShop developed by myzticbean");
 
-        if(this.getDescription().getVersion().toLowerCase().contains("snapshot")) {
+        if (this.getDescription().getVersion().toLowerCase().contains("snapshot")) {
             Logger.logWarning("This is a SNAPSHOT build! NOT recommended for production servers.");
             Logger.logWarning("If you find any bugs, please report them here: https://github.com/myzticbean/QSFindItemAddOn/issues");
         }
@@ -90,44 +94,17 @@ public final class FindItemAddOn extends JavaPlugin {
 
     @Override
     public void onEnable() {
-
+        // Data & managers
         HighlightColourManager.init(getDataFolder());
-
-        // --- FIX: Initialize ExcludedWarpsUtil here ---
         ExcludedWarpsUtil.init(this);
 
-        if(ENABLE_TRIAL_PERIOD) {
-            Logger.logWarning("THIS IS A TRIAL BUILD!");
-            LocalDateTime trialEndDate = LocalDate.of(TRIAL_END_YEAR, TRIAL_END_MONTH, TRIAL_END_DAY).atTime(LocalTime.MIDNIGHT);
-            LocalDateTime today = LocalDateTime.now();
-            Duration duration = Duration.between(trialEndDate, today);
-            boolean hasPassed = Duration.ofDays(ChronoUnit.DAYS.between(today, trialEndDate)).isNegative();
-            if(hasPassed) {
-                Logger.logError("Your trial has expired! Please contact the developer.");
-                getServer().getPluginManager().disablePlugin(this);
-                return;
-            } else {
-                Logger.logWarning("You have " + Math.abs(duration.toDays()) + " days remaining in your trial.");
-            }
-        }
-
-        if(!Bukkit.getPluginManager().isPluginEnabled("QuickShop")
-                && !Bukkit.getPluginManager().isPluginEnabled("QuickShop-Hikari")) {
-            Logger.logInfo("Delaying QuickShop hook as they are not enabled yet");
-        }
-        else if(Bukkit.getPluginManager().isPluginEnabled("QuickShop")) {
-            qSReremakeInstalled = true;
-        }
-        else {
-            qSHikariInstalled = true;
-        }
-
-        // Registering Bukkit event listeners
+        // Register Bukkit listeners
         initBukkitEventListeners();
 
+        // Highlighter system
         ShopHighlighter.init(this);
 
-        // Handle config file
+        // Config lifecycle
         this.saveDefaultConfig();
         this.getConfig().options().copyDefaults(true);
         ConfigSetup.setupConfig();
@@ -137,15 +114,12 @@ public final class FindItemAddOn extends JavaPlugin {
         initConfigProvider();
         ConfigSetup.copySampleConfig();
 
-        // --- ADDED: Create shared handler and register /outofstock ---
+        // Commands
         this.cmdExecutorHandler = new CmdExecutorHandler();
         getCommand("outofstock").setExecutor(new OutOfStockCommand(cmdExecutorHandler));
-
-
-
         initCommands();
 
-        // Register /wheretobuy command and tab completer
+        // Additional commands + tab completers
         getCommand("wheretobuy").setExecutor(new WhereToBuyCommand());
         getCommand("wheretobuy").setTabCompleter(new WhereToBuyTabCompleter());
         getCommand("highlightcolour").setExecutor(new HighlightColourCommand());
@@ -155,31 +129,63 @@ public final class FindItemAddOn extends JavaPlugin {
         getCommand("excludewarp").setTabCompleter(new ExcludeWarpCommand());
         getCommand("includewarp").setExecutor(new ExcludeWarpCommand());
         getCommand("includewarp").setTabCompleter(new ExcludeWarpCommand());
-
         getCommand("wheretosell").setExecutor(new WhereToSellCommand());
         getCommand("wheretosell").setTabCompleter(new WhereToSellTabCompleter());
 
-        // Run plugin startup logic after server is done loading
+        // QuickShop presence detection
+        if (!Bukkit.getPluginManager().isPluginEnabled("QuickShop")
+                && !Bukkit.getPluginManager().isPluginEnabled("QuickShop-Hikari")) {
+            Logger.logInfo("Delaying QuickShop hook as they are not enabled yet");
+        } else if (Bukkit.getPluginManager().isPluginEnabled("QuickShop")) {
+            qSReremakeInstalled = true;
+        } else {
+            qSHikariInstalled = true;
+        }
+
+        // --- PAPI dynamic registration (works with PlugMan & /papi reload)
+        papiRegistrar = new PapiRegistrar(this);
+        getServer().getPluginManager().registerEvents(papiRegistrar, this);
+        papiRegistrar.tryRegister(); // register immediately if PAPI is already present
+
+        // Defer the heavy startup bits until the server has finished enabling plugins
         Bukkit.getScheduler().scheduleSyncDelayedTask(FindItemAddOn.getInstance(), this::runPluginStartupTasks);
+
+        // Trial build gate (kept as-is)
+        if (ENABLE_TRIAL_PERIOD) {
+            Logger.logWarning("THIS IS A TRIAL BUILD!");
+            LocalDateTime trialEndDate = LocalDate.of(TRIAL_END_YEAR, TRIAL_END_MONTH, TRIAL_END_DAY).atTime(LocalTime.MIDNIGHT);
+            LocalDateTime today = LocalDateTime.now();
+            Duration duration = Duration.between(trialEndDate, today);
+            boolean hasPassed = Duration.ofDays(ChronoUnit.DAYS.between(today, trialEndDate)).isNegative();
+            if (hasPassed) {
+                Logger.logError("Your trial has expired! Please contact the developer.");
+                getServer().getPluginManager().disablePlugin(this);
+            } else {
+                Logger.logWarning("You have " + Math.abs(duration.toDays()) + " days remaining in your trial.");
+            }
+        }
     }
 
     @Override
     public void onDisable() {
-        if(qsApi != null) {
-            ShopSearchActivityStorageUtil.saveShopsToFile();
+        // Unregister PAPI expansion cleanly
+        if (papiRegistrar != null) {
+            papiRegistrar.unregister();
         }
-        else if(!ENABLE_TRIAL_PERIOD) {
+
+        if (qsApi != null) {
+            ShopSearchActivityStorageUtil.saveShopsToFile();
+        } else if (!ENABLE_TRIAL_PERIOD) {
             Logger.logError("Uh oh! Looks like either this plugin has crashed or you don't have QuickShop-Hikari or QuickShop-Reremake installed.");
         }
         Logger.logInfo("Bye!");
     }
 
     private void runPluginStartupTasks() {
-
         serverVersion = Bukkit.getServer().getVersion();
         Logger.logInfo("Server version found: " + serverVersion);
 
-        if(!isQSReremakeInstalled() && !isQSHikariInstalled()) {
+        if (!isQSReremakeInstalled() && !isQSHikariInstalled()) {
             Logger.logError("QuickShop is required to use this addon. Please install QuickShop and try again!");
             Logger.logError("Both QuickShop-Hikari and QuickShop-Reremake are supported by this addon.");
             Logger.logError("Download links:");
@@ -204,7 +210,6 @@ public final class FindItemAddOn extends JavaPlugin {
 
         Logger.logInfo("Registering tasks");
         Bukkit.getServer().getScheduler().scheduleSyncRepeatingTask(this, new Task15MinInterval(), 0, REPEATING_TASK_SCHEDULE_MINS);
-
     }
 
     private void initCommands() {
@@ -220,9 +225,10 @@ public final class FindItemAddOn extends JavaPlugin {
         this.getServer().getPluginManager().registerEvents(new MenuListener(), this);
         this.getServer().getPluginManager().registerEvents(new PlayerJoinEventListener(), this);
     }
+
     private void initExternalPluginEventListeners() {
         Logger.logInfo("Registering external plugin event listeners");
-        if(PlayerWarpsPlugin.getIsEnabled()) {
+        if (PlayerWarpsPlugin.getIsEnabled()) {
             this.getServer().getPluginManager().registerEvents(new PWPlayerWarpRemoveEventListener(), this);
             this.getServer().getPluginManager().registerEvents(new PWPlayerWarpCreateEventListener(), this);
         }
@@ -232,12 +238,11 @@ public final class FindItemAddOn extends JavaPlugin {
         configProvider = new ConfigProvider();
     }
 
-    public static PlayerMenuUtility getPlayerMenuUtility(Player p){
+    public static PlayerMenuUtility getPlayerMenuUtility(Player p) {
         PlayerMenuUtility playerMenuUtility;
-        if(playerMenuUtilityMap.containsKey(p)) {
+        if (playerMenuUtilityMap.containsKey(p)) {
             return playerMenuUtilityMap.get(p);
-        }
-        else {
+        } else {
             playerMenuUtility = new PlayerMenuUtility(p);
             playerMenuUtilityMap.put(p, playerMenuUtility);
             return playerMenuUtility;
@@ -254,21 +259,20 @@ public final class FindItemAddOn extends JavaPlugin {
 
     private void initFindItemCmd() {
         List<String> alias;
-        if(StringUtils.isEmpty(FindItemAddOn.getConfigProvider().FIND_ITEM_TO_SELL_AUTOCOMPLETE)
+        if (StringUtils.isEmpty(FindItemAddOn.getConfigProvider().FIND_ITEM_TO_SELL_AUTOCOMPLETE)
                 || StringUtils.containsIgnoreCase(FindItemAddOn.getConfigProvider().FIND_ITEM_TO_SELL_AUTOCOMPLETE, " ")) {
             alias = Arrays.asList("shopsearch", "searchshop", "searchitem");
-        }
-        else {
+        } else {
             alias = FindItemAddOn.getConfigProvider().FIND_ITEM_COMMAND_ALIAS;
         }
 
         Class<? extends SubCommand>[] subCommands;
-        if(FindItemAddOn.getConfigProvider().FIND_ITEM_CMD_REMOVE_HIDE_REVEAL_SUBCMDS) {
-            subCommands = new Class[] {
+        if (FindItemAddOn.getConfigProvider().FIND_ITEM_CMD_REMOVE_HIDE_REVEAL_SUBCMDS) {
+            subCommands = new Class[]{
                     SellSubCmd.class, BuySubCmd.class
             };
         } else {
-            subCommands = new Class[] {
+            subCommands = new Class[]{
                     SellSubCmd.class, BuySubCmd.class, HideShopSubCmd.class, RevealShopSubCmd.class
             };
         }
@@ -354,5 +358,4 @@ public final class FindItemAddOn extends JavaPlugin {
     public static QSApi getQsApiInstance() {
         return qsApi;
     }
-
 }

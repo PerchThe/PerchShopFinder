@@ -99,6 +99,25 @@ public class FoundShopsMenu extends PaginatedMenu {
             int shopIndex = slot - 9;
             if (shopIndex >= 0 && shopIndex < currentPageShops.size()) {
                 FoundShopItemModel foundShop = currentPageShops.get(shopIndex);
+                // Shift click to favorite/unfavorite the warp
+                if (event.getClick() == org.bukkit.event.inventory.ClickType.SHIFT_RIGHT || event.getClick() == org.bukkit.event.inventory.ClickType.SHIFT_LEFT) {
+                    String nearestWarp = getNearestWarpInfo(foundShop);
+                    if (nearestWarp != null && !nearestWarp.isEmpty() && !nearestWarp.equals(configProvider.NO_WARP_NEAR_SHOP_ERROR_MSG)) {
+                        player.performCommand("w favorite " + nearestWarp);
+// Delay menu refresh to allow favorite status to update
+                        Bukkit.getScheduler().runTaskLater(
+                                FindItemAddOn.getInstance(),
+                                () -> super.open(super.playerMenuUtility.getPlayerShopSearchResult()),
+                                10L // 10 ticks = 0.5 seconds, adjust if needed
+                        );
+                    } else {
+                        // No warp found, just refresh (or do nothing)
+                        super.open(super.playerMenuUtility.getPlayerShopSearchResult());
+                    }
+                    event.setCancelled(true);
+                    return;
+                }
+                // Normal click behavior
                 handleShopItemClick(event, player, foundShop);
             }
         }

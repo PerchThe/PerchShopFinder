@@ -25,6 +25,7 @@ import me.perch.shopfinder.dependencies.PlayerWarpsPlugin;
 import me.perch.shopfinder.FindItemAddOn;
 import me.perch.shopfinder.utils.CommonUtils;
 import me.perch.shopfinder.utils.log.Logger;
+import me.perch.shopfinder.utils.ExcludedWarpsUtil; // <-- Added import
 import lombok.experimental.UtilityClass;
 import org.bukkit.Location;
 import org.bukkit.entity.Player;
@@ -32,6 +33,7 @@ import org.jetbrains.annotations.Nullable;
 
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.TreeMap;
 import java.util.UUID;
 
@@ -54,6 +56,9 @@ public class PlayerWarpsUtil {
         Logger.logDebugInfo("Find nearest warp for shop location " + shopLocation);
         UUID playerId = player.getUniqueId();
 
+        // Get the set of excluded warps
+        Set<String> excluded = ExcludedWarpsUtil.getExcludedWarps();
+
         List<Warp> playersWarps = PlayerWarpsPlugin.getAllWarps().stream()
                 .filter(warp -> warp.getWarpLocation().getWorld() != null)
                 .filter(warp -> warp.getWarpLocation().getWorld().equals(shopLocation.getWorld().getName()))
@@ -61,6 +66,8 @@ public class PlayerWarpsUtil {
                 .filter(warp -> warp.getBanned().stream().noneMatch(banned -> banned.getUUID().equals(playerId)))
                 // If whitelist is enabled, only allow if whitelisted
                 .filter(warp -> !warp.isWhitelistEnabled() || (warp.getWhitelisted() != null && warp.getWhitelisted().contains(playerId)))
+                // Exclude warps in the excluded list
+                .filter(warp -> !excluded.contains(warp.getWarpName().toLowerCase()))
                 // Only include warps within 128 blocks (3D distance)
                 .filter(warp -> {
                     double distance = shopLocation.distance(

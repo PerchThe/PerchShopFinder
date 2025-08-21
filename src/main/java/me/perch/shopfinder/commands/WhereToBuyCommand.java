@@ -334,6 +334,15 @@
                                     })
                                     .collect(Collectors.toList());
                         }
+                        // If searching for BOOK, filter out renamed ones (vanilla only)
+                        if (mat == Material.BOOK) {
+                            foundItems = foundItems.stream()
+                                    .filter(shopItem -> {
+                                        ItemStack item = shopItem.getItemStack();
+                                        return item != null && item.getType() == Material.BOOK && (!item.hasItemMeta() || !item.getItemMeta().hasDisplayName());
+                                    })
+                                    .collect(Collectors.toList());
+                        }
 
                         result.allResults.addAll(foundItems);
                     } else {

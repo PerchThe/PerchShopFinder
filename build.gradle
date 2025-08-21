@@ -19,11 +19,17 @@ repositories {
     maven { url 'https://repo.essentialsx.net/snapshots/' }
     maven { url 'https://repo.olziedev.com/' }
     maven { url 'https://maven.enginehub.org/repo/' }
+
+    // PlaceholderAPI official repo
+    maven { url 'https://repo.extendedclip.com/releases/' } // <-- added
 }
 
 dependencies {
     // Core server APIs (never shade these)
     compileOnly "org.spigotmc:spigot-api:1.21.5-R0.1-SNAPSHOT"
+
+    // PlaceholderAPI (never shade)
+    compileOnly "me.clip:placeholderapi:2.11.6" // <-- added
 
     // PaperLib for async tasks (safe to shade)
     implementation "io.papermc:paperlib:1.0.7"

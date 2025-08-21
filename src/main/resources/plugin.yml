@@ -10,6 +10,7 @@ softdepend:
   - WorldGuard
   - Essentials
   - ProtocolLib
+  - PlaceholderAPI
 
 permissions:
   finditem.use:
