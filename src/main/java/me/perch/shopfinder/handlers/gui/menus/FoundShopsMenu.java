@@ -81,9 +81,11 @@ public class FoundShopsMenu extends PaginatedMenu {
     public void handleMenu(@NotNull InventoryClickEvent event) {
         int slot = event.getSlot();
         Player player = (Player) event.getWhoClicked();
+
         if (handleNavigationClick(event, slot)) {
             return;
         }
+
         if (slot == 0) {
             String origin = playerMenuUtility.getOriginCommand();
             if ("wtbmenu".equalsIgnoreCase(origin)) {
@@ -93,14 +95,17 @@ public class FoundShopsMenu extends PaginatedMenu {
             }
             return;
         }
+
         if (event.getCurrentItem() == null || event.getCurrentItem().getType().equals(Material.AIR)) {
             Logger.logDebugInfo(player.getName() + " just clicked on AIR!");
             return;
         }
+
         if (slot >= 9 && slot < 45) {
             int shopIndex = slot - 9;
             if (shopIndex >= 0 && shopIndex < currentPageShops.size()) {
                 FoundShopItemModel foundShop = currentPageShops.get(shopIndex);
+
                 if (event.getClick() == org.bukkit.event.inventory.ClickType.SHIFT_RIGHT
                         || event.getClick() == org.bukkit.event.inventory.ClickType.SHIFT_LEFT) {
                     String nearestWarp = getNearestWarpInfo(foundShop);
@@ -118,6 +123,7 @@ public class FoundShopsMenu extends PaginatedMenu {
                     event.setCancelled(true);
                     return;
                 }
+
                 handleShopItemClick(event, player, foundShop);
             }
         }
@@ -164,19 +170,24 @@ public class FoundShopsMenu extends PaginatedMenu {
             return;
         }
         if (shopLocation == null) return;
+
         UUID shopOwner = ShopSearchActivityStorageUtil.getShopOwnerUUID(shopLocation);
         if (player.getUniqueId().equals(shopOwner) && !PlayerPermsEnum.canPlayerTpToOwnShop(player)) {
             player.sendMessage(ColorTranslator.translateColorCodes(
                     configProvider.PLUGIN_PREFIX + configProvider.SHOP_TP_NO_PERMISSION_MSG));
             return;
         }
+
         Location locToTeleport = LocationUtils.findSafeLocationAroundShop(shopLocation, player);
         if (locToTeleport == null) {
             sendUnsafeAreaMessage(player);
             return;
         }
+
         ShopSearchActivityStorageUtil.addPlayerVisitEntryAsync(shopLocation, player);
+
         if (EssentialsXPlugin.isEnabled()) EssentialsXPlugin.setLastLocation(player);
+
         if (shouldApplyTeleportDelay(player)) {
             long delay = Long.parseLong(configProvider.TP_DELAY_IN_SECONDS);
             String tpDelayMsg = configProvider.TP_DELAY_MESSAGE;
@@ -222,15 +233,20 @@ public class FoundShopsMenu extends PaginatedMenu {
             meta.setDisplayName(" ");
             filler.setItemMeta(meta);
         }
+
         for (int i = 1; i <= 8; i++) {
             inventory.setItem(i, filler);
         }
+
         addMenuBottomBar();
         updateNavButtonLabels(foundShops != null ? foundShops.size() : 0);
+
         currentPageShops.clear();
         if (foundShops == null || foundShops.isEmpty()) {
             return;
         }
+
+        // If using PlayerWarps sorting by favourites first
         if (configProvider.NEAREST_WARP_MODE == 2 && PlayerWarpsPlugin.getIsEnabled()) {
             Player viewer = playerMenuUtility.getOwner();
             Map<FoundShopItemModel, Boolean> favMap = new HashMap<>(foundShops.size());
@@ -246,16 +262,36 @@ public class FoundShopsMenu extends PaginatedMenu {
                 return af ? -1 : 1;
             });
         }
+
         int maxItemsPerPage = MAX_ITEMS_PER_PAGE;
         int shopItemSlot = 9;
+
         for (int guiSlotCounter = 0; guiSlotCounter < maxItemsPerPage && shopItemSlot < 45; guiSlotCounter++, shopItemSlot++) {
             index = maxItemsPerPage * page + guiSlotCounter;
             if (index >= foundShops.size()) break;
+
             FoundShopItemModel foundShop = foundShops.get(index);
             if (foundShop == null) continue;
+
             ItemStack item = createShopItem(foundShop);
+
+            // Synchronous favourite visual (lore star + glow) when possible
+            if (configProvider.NEAREST_WARP_MODE == 2 && PlayerWarpsPlugin.getIsEnabled()) {
+                Player viewingPlayer = playerMenuUtility.getOwner();
+                Warp nearest = PlayerWarpsUtil.findNearestWarp(
+                        foundShop.getShopLocation(),
+                        viewingPlayer,
+                        foundShop.getShopOwner()
+                );
+                if (nearest != null && isFavouriteSync(viewingPlayer, nearest.getWarpName())) {
+                    item = ensureFavouriteLoreAndGlow(item);
+                }
+            }
+
             inventory.setItem(shopItemSlot, item);
             currentPageShops.add(foundShop);
+
+            // Async favourite check to update visuals without display-name changes
             if (configProvider.NEAREST_WARP_MODE == 2 && PlayerWarpsPlugin.getIsEnabled()) {
                 Player viewingPlayer = playerMenuUtility.getOwner();
                 Warp nearestWarp = PlayerWarpsUtil.findNearestWarp(
@@ -264,19 +300,13 @@ public class FoundShopsMenu extends PaginatedMenu {
                         foundShop.getShopOwner()
                 );
                 if (nearestWarp != null) {
-                    final int slot = shopItemSlot;
+                    final int slot = shopItemSlot; // effectively final for lambda
                     PlayerWarpsPlugin.isFavourite(viewingPlayer, nearestWarp.getWarpName(), isFav -> {
                         if (isFav) {
-                            ItemStack starred = item.clone();
-                            ItemMeta im = starred.getItemMeta();
-                            if (im != null) {
-                                String currentName = im.hasDisplayName() ? im.getDisplayName() : null;
-                                im.setDisplayName(withStarPrefix(currentName));
-                                starred.setItemMeta(im);
-                            }
-                            final ItemStack starredFinal = makeItemGlow(starred);
                             Bukkit.getScheduler().runTask(FindItemAddOn.getInstance(), () -> {
-                                inventory.setItem(slot, starredFinal);
+                                ItemStack curr = inventory.getItem(slot);
+                                if (curr == null || curr.getType() == Material.AIR) return;
+                                inventory.setItem(slot, ensureFavouriteLoreAndGlow(curr));
                             });
                         }
                     });
@@ -297,14 +327,9 @@ public class FoundShopsMenu extends PaginatedMenu {
         } catch (InterruptedException ignored) {
             Thread.currentThread().interrupt();
         } catch (Throwable t) {
+            // swallow
         }
         return fav.get();
-    }
-
-    private String withStarPrefix(String base) {
-        String plain = org.bukkit.ChatColor.stripColor(base == null ? "" : base);
-        if (plain != null && plain.contains("⭐")) return base;
-        return ColorTranslator.translateColorCodes("&6⭐ &r") + (base == null ? "" : base);
     }
 
     private void updateNavButtonLabels(int totalItems) {
@@ -328,19 +353,24 @@ public class FoundShopsMenu extends PaginatedMenu {
         inventory.setItem(slot, btn);
     }
 
+    // Rolled back to your original logic: DO NOT touch display names.
     private @NotNull ItemStack createShopItem(@NotNull FoundShopItemModel foundShop) {
         ItemStack item = new ItemStack(foundShop.getItem().getType(), foundShop.getItem().getAmount());
         ItemMeta meta = foundShop.getItem().getItemMeta();
         if (meta == null) {
             meta = Bukkit.getItemFactory().getItemMeta(item.getType());
         }
+
         List<String> lore = new ArrayList<>();
         addItemLore(lore, foundShop);
         meta.setLore(lore);
+
         setLocationData(meta, foundShop);
+
         if (foundShop.getItem().getItemMeta().hasCustomModelData()) {
             meta.setCustomModelData(foundShop.getItem().getItemMeta().getCustomModelData());
         }
+
         item.setItemMeta(meta);
         return item;
     }
@@ -367,12 +397,15 @@ public class FoundShopsMenu extends PaginatedMenu {
     }
 
     private void addItemLore(List<String> lore, FoundShopItemModel foundShop) {
+        // Copy existing lore from the item
         ItemMeta shopItemMeta = foundShop.getItem().getItemMeta();
         if (shopItemMeta != null && shopItemMeta.hasLore()) {
             for (String line : shopItemMeta.getLore()) {
                 lore.add(ColorTranslator.translateColorCodes(line));
             }
         }
+
+        // Template selection
         List<String> loreTemplate;
         if (isBuying && configProvider.SHOP_GUI_ITEM_LORE_BUY != null) {
             loreTemplate = configProvider.SHOP_GUI_ITEM_LORE_BUY;
@@ -381,31 +414,65 @@ public class FoundShopsMenu extends PaginatedMenu {
         } else {
             loreTemplate = configProvider.SHOP_GUI_ITEM_LORE;
         }
+
+        // Favourite check (sync) — add star at very top
         boolean isFav = false;
         Warp nearestForFav = getNearestPlayerWarp(foundShop);
         if (nearestForFav != null) {
             isFav = isFavouriteSync(playerMenuUtility.getOwner(), nearestForFav.getWarpName());
         }
+        if (isFav && !hasFavouriteLore(lore)) {
+            lore.add(0, ColorTranslator.translateColorCodes("&6⭐ &7Favourite"));
+        }
+
+        // Fill template lines
         for (String loreLine : loreTemplate) {
-            String processed = loreLine;
-            if (processed.contains(ShopLorePlaceholdersEnum.NEAREST_WARP.value())) {
+            String processed;
+            if (loreLine.contains(ShopLorePlaceholdersEnum.NEAREST_WARP.value())) {
                 String nearestWarpInfo = getNearestWarpInfo(foundShop);
-                processed = processed.replace(ShopLorePlaceholdersEnum.NEAREST_WARP.value(), nearestWarpInfo);
+                processed = loreLine.replace(ShopLorePlaceholdersEnum.NEAREST_WARP.value(), nearestWarpInfo);
             } else {
-                processed = replaceLorePlaceholders(processed, foundShop);
+                processed = replaceLorePlaceholders(loreLine, foundShop);
             }
+
+            // {FAV_TOGGLE} and "(un)favourite" convenience
             if (processed.contains("{FAV_TOGGLE}") || processed.toLowerCase(Locale.ROOT).contains("(un)favourite")) {
                 String toggleWord = isFav ? "&cunfavourite" : "&afavourite";
                 processed = processed
                         .replace("{FAV_TOGGLE}", toggleWord)
                         .replace("(un)favourite", toggleWord);
             }
+
             lore.add(ColorTranslator.translateColorCodes(processed));
         }
+
         if (configProvider.TP_PLAYER_DIRECTLY_TO_SHOP
                 && playerMenuUtility.getOwner().hasPermission(PlayerPermsEnum.FINDITEM_SHOPTP.value())) {
             lore.add(ColorTranslator.translateColorCodes(configProvider.CLICK_TO_TELEPORT_MSG));
         }
+    }
+
+    private boolean hasFavouriteLore(List<String> lore) {
+        if (lore == null) return false;
+        for (String s : lore) {
+            String stripped = org.bukkit.ChatColor.stripColor(s == null ? "" : s);
+            if (stripped != null && stripped.toLowerCase(Locale.ROOT).contains("favourite")) return true;
+        }
+        return false;
+    }
+
+    private ItemStack ensureFavouriteLoreAndGlow(ItemStack base) {
+        ItemStack item = base.clone();
+        ItemMeta im = item.getItemMeta();
+        if (im == null) return base;
+
+        List<String> lore = im.hasLore() ? new ArrayList<>(im.getLore()) : new ArrayList<>();
+        if (!hasFavouriteLore(lore)) {
+            lore.add(0, ColorTranslator.translateColorCodes("&6⭐ &7Favourite"));
+        }
+        im.setLore(lore);
+        item.setItemMeta(im);
+        return makeItemGlow(item);
     }
 
     private String getNearestWarpInfo(FoundShopItemModel foundShop) {
@@ -457,8 +524,9 @@ public class FoundShopsMenu extends PaginatedMenu {
     }
 
     private @NotNull String replaceLorePlaceholders(String text, @NotNull FoundShopItemModel shop) {
-        text = text.replace(ShopLorePlaceholdersEnum.ITEM_PRICE.value(), formatNumber(shop.getShopPrice()));
-        if (text.contains(ShopLorePlaceholdersEnum.SHOP_STOCK.value())) {
+        String result = text.replace(ShopLorePlaceholdersEnum.ITEM_PRICE.value(), formatNumber(shop.getShopPrice()));
+
+        if (result.contains(ShopLorePlaceholdersEnum.SHOP_STOCK.value())) {
             int stock = shop.getRemainingStockOrSpace();
             String stockText;
             if (stock == -2) {
@@ -468,25 +536,32 @@ public class FoundShopsMenu extends PaginatedMenu {
             } else {
                 stockText = (stock == Integer.MAX_VALUE) ? SHOP_STOCK_UNLIMITED : String.valueOf(stock);
             }
-            text = text.replace(ShopLorePlaceholdersEnum.SHOP_STOCK.value(), stockText);
+            result = result.replace(ShopLorePlaceholdersEnum.SHOP_STOCK.value(), stockText);
         }
-        text = text.replace(ShopLorePlaceholdersEnum.SHOP_PER_ITEM_QTY.value(),
+
+        result = result.replace(ShopLorePlaceholdersEnum.SHOP_PER_ITEM_QTY.value(),
                 String.valueOf(shop.getItem().getAmount()));
-        if (text.contains(ShopLorePlaceholdersEnum.SHOP_OWNER.value())) {
+
+        if (result.contains(ShopLorePlaceholdersEnum.SHOP_OWNER.value())) {
             OfflinePlayer shopOwner = Bukkit.getOfflinePlayer(shop.getShopOwner());
             String ownerName = shopOwner.getName() != null ? shopOwner.getName() : "Admin";
-            text = text.replace(ShopLorePlaceholdersEnum.SHOP_OWNER.value(), ownerName);
+            result = result.replace(ShopLorePlaceholdersEnum.SHOP_OWNER.value(), ownerName);
         }
-        if (text.contains(ShopLorePlaceholdersEnum.SHOP_LOCATION.value())) {
+
+        if (result.contains(ShopLorePlaceholdersEnum.SHOP_LOCATION.value())) {
             Location loc = shop.getShopLocation();
             String locText = loc.getBlockX() + ", " + loc.getBlockY() + ", " + loc.getBlockZ();
-            text = text.replace(ShopLorePlaceholdersEnum.SHOP_LOCATION.value(), locText);
+            result = result.replace(ShopLorePlaceholdersEnum.SHOP_LOCATION.value(), locText);
         }
-        text = text.replace(ShopLorePlaceholdersEnum.SHOP_WORLD.value(),
+
+        result = result.replace(ShopLorePlaceholdersEnum.SHOP_WORLD.value(),
                 Objects.requireNonNull(shop.getShopLocation().getWorld()).getName());
-        text = text.replace(ShopLorePlaceholdersEnum.SHOP_VISITS.value(),
+
+        result = result.replace(ShopLorePlaceholdersEnum.SHOP_VISITS.value(),
                 String.valueOf(ShopSearchActivityStorageUtil.getPlayerVisitCount(shop.getShopLocation())));
-        if (text.contains(ShopLorePlaceholdersEnum.WARP_AVG_RATING.value()) || text.contains(ShopLorePlaceholdersEnum.WARP_TOTAL_RATINGS.value())) {
+
+        if (result.contains(ShopLorePlaceholdersEnum.WARP_AVG_RATING.value())
+                || result.contains(ShopLorePlaceholdersEnum.WARP_TOTAL_RATINGS.value())) {
             String warpName = null;
             if (PlayerWarpsPlugin.getIsEnabled() && FindItemAddOn.getConfigProvider().NEAREST_WARP_MODE == 2) {
                 Player viewingPlayer = playerMenuUtility.getOwner();
@@ -503,10 +578,11 @@ public class FoundShopsMenu extends PaginatedMenu {
             int total = (warpName != null) ? PlayerWarpsPlugin.getWarpTotalRatings(warpName) : -1;
             String avgString = avg >= 0 ? String.format("%.2f", avg) : "N/A";
             String totalString = total >= 0 ? String.valueOf(total) : "N/A";
-            text = text.replace(ShopLorePlaceholdersEnum.WARP_AVG_RATING.value(), avgString)
+            result = result.replace(ShopLorePlaceholdersEnum.WARP_AVG_RATING.value(), avgString)
                     .replace(ShopLorePlaceholdersEnum.WARP_TOTAL_RATINGS.value(), "(" + totalString + " ratings)");
         }
-        return text;
+
+        return ColorTranslator.translateColorCodes(result);
     }
 
     private int processUnknownStockSpace(FoundShopItemModel shop) {
