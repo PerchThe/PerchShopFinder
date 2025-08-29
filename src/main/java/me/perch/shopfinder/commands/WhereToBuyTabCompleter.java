@@ -330,6 +330,9 @@ public class WhereToBuyTabCompleter implements TabCompleter {
         if ("tag".startsWith(toComplete)) completions.add("tag");
         if ("*".startsWith(toComplete)) completions.add("*");
         if ("tracker".startsWith(toComplete)) completions.add("tracker");
+        if ("art".startsWith(toComplete)) completions.add("art");
+        if ("artmap".startsWith(toComplete)) completions.add("artmap");
+        if ("mapart".startsWith(toComplete)) completions.add("mapart");
 
         completions.addAll(enchantBookNames.stream()
                 .filter(e -> e.toLowerCase().startsWith(toComplete))

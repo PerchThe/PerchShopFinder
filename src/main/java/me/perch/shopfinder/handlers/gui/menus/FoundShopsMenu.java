@@ -37,8 +37,10 @@ import org.bukkit.persistence.PersistentDataType;
 import org.jetbrains.annotations.NotNull;
 import me.perch.shopfinder.utils.ShopHighlighter;
 import me.perch.shopfinder.utils.HighlightColourManager;
-import java.util.ArrayList;
-import java.util.List;
+
+import java.util.*;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.Objects;
 import java.util.UUID;
 
@@ -99,25 +101,23 @@ public class FoundShopsMenu extends PaginatedMenu {
             int shopIndex = slot - 9;
             if (shopIndex >= 0 && shopIndex < currentPageShops.size()) {
                 FoundShopItemModel foundShop = currentPageShops.get(shopIndex);
-                // Shift click to favorite/unfavorite the warp
-                if (event.getClick() == org.bukkit.event.inventory.ClickType.SHIFT_RIGHT || event.getClick() == org.bukkit.event.inventory.ClickType.SHIFT_LEFT) {
+                if (event.getClick() == org.bukkit.event.inventory.ClickType.SHIFT_RIGHT
+                        || event.getClick() == org.bukkit.event.inventory.ClickType.SHIFT_LEFT) {
                     String nearestWarp = getNearestWarpInfo(foundShop);
-                    if (nearestWarp != null && !nearestWarp.isEmpty() && !nearestWarp.equals(configProvider.NO_WARP_NEAR_SHOP_ERROR_MSG)) {
+                    if (nearestWarp != null && !nearestWarp.isEmpty()
+                            && !nearestWarp.equals(configProvider.NO_WARP_NEAR_SHOP_ERROR_MSG)) {
                         player.performCommand("w favorite " + nearestWarp);
-// Delay menu refresh to allow favorite status to update
                         Bukkit.getScheduler().runTaskLater(
                                 FindItemAddOn.getInstance(),
                                 () -> super.open(super.playerMenuUtility.getPlayerShopSearchResult()),
-                                10L // 10 ticks = 0.5 seconds, adjust if needed
+                                10L
                         );
                     } else {
-                        // No warp found, just refresh (or do nothing)
                         super.open(super.playerMenuUtility.getPlayerShopSearchResult());
                     }
                     event.setCancelled(true);
                     return;
                 }
-                // Normal click behavior
                 handleShopItemClick(event, player, foundShop);
             }
         }
@@ -125,22 +125,10 @@ public class FoundShopsMenu extends PaginatedMenu {
 
     private boolean handleNavigationClick(InventoryClickEvent event, int slot) {
         return switch (slot) {
-            case 45 -> {
-                handleMenuClickForNavToPrevPage(event);
-                yield true;
-            }
-            case 46 -> {
-                handleFirstPageClick(event);
-                yield true;
-            }
-            case 52 -> {
-                handleLastPageClick(event);
-                yield true;
-            }
-            case 53 -> {
-                handleMenuClickForNavToNextPage(event);
-                yield true;
-            }
+            case 45 -> { handleMenuClickForNavToPrevPage(event); yield true; }
+            case 46 -> { handleFirstPageClick(event); yield true; }
+            case 52 -> { handleLastPageClick(event); yield true; }
+            case 53 -> { handleMenuClickForNavToNextPage(event); yield true; }
             default -> false;
         };
     }
@@ -175,8 +163,7 @@ public class FoundShopsMenu extends PaginatedMenu {
             sendNoPermissionMessage(player);
             return;
         }
-        if (shopLocation == null)
-            return;
+        if (shopLocation == null) return;
         UUID shopOwner = ShopSearchActivityStorageUtil.getShopOwnerUUID(shopLocation);
         if (player.getUniqueId().equals(shopOwner) && !PlayerPermsEnum.canPlayerTpToOwnShop(player)) {
             player.sendMessage(ColorTranslator.translateColorCodes(
@@ -189,8 +176,7 @@ public class FoundShopsMenu extends PaginatedMenu {
             return;
         }
         ShopSearchActivityStorageUtil.addPlayerVisitEntryAsync(shopLocation, player);
-        if (EssentialsXPlugin.isEnabled())
-            EssentialsXPlugin.setLastLocation(player);
+        if (EssentialsXPlugin.isEnabled()) EssentialsXPlugin.setLastLocation(player);
         if (shouldApplyTeleportDelay(player)) {
             long delay = Long.parseLong(configProvider.TP_DELAY_IN_SECONDS);
             String tpDelayMsg = configProvider.TP_DELAY_MESSAGE;
@@ -213,12 +199,8 @@ public class FoundShopsMenu extends PaginatedMenu {
 
     private void handleWarpTeleport(Player player, String warpName) {
         switch (configProvider.NEAREST_WARP_MODE) {
-            case 1:
-                EssentialWarpsUtil.warpPlayer(player, warpName);
-                break;
-            case 2:
-                PlayerWarpsUtil.executeWarpPlayer(player, warpName);
-                break;
+            case 1 -> EssentialWarpsUtil.warpPlayer(player, warpName);
+            case 2 -> PlayerWarpsUtil.executeWarpPlayer(player, warpName);
         }
     }
 
@@ -244,21 +226,33 @@ public class FoundShopsMenu extends PaginatedMenu {
             inventory.setItem(i, filler);
         }
         addMenuBottomBar();
+        updateNavButtonLabels(foundShops != null ? foundShops.size() : 0);
         currentPageShops.clear();
         if (foundShops == null || foundShops.isEmpty()) {
             return;
+        }
+        if (configProvider.NEAREST_WARP_MODE == 2 && PlayerWarpsPlugin.getIsEnabled()) {
+            Player viewer = playerMenuUtility.getOwner();
+            Map<FoundShopItemModel, Boolean> favMap = new HashMap<>(foundShops.size());
+            for (FoundShopItemModel shop : foundShops) {
+                Warp nearest = PlayerWarpsUtil.findNearestWarp(shop.getShopLocation(), viewer, shop.getShopOwner());
+                boolean isFav = nearest != null && isFavouriteSync(viewer, nearest.getWarpName());
+                favMap.put(shop, isFav);
+            }
+            foundShops.sort((a, b) -> {
+                boolean af = favMap.getOrDefault(a, false);
+                boolean bf = favMap.getOrDefault(b, false);
+                if (af == bf) return 0;
+                return af ? -1 : 1;
+            });
         }
         int maxItemsPerPage = MAX_ITEMS_PER_PAGE;
         int shopItemSlot = 9;
         for (int guiSlotCounter = 0; guiSlotCounter < maxItemsPerPage && shopItemSlot < 45; guiSlotCounter++, shopItemSlot++) {
             index = maxItemsPerPage * page + guiSlotCounter;
-            if (index >= foundShops.size()) {
-                break;
-            }
+            if (index >= foundShops.size()) break;
             FoundShopItemModel foundShop = foundShops.get(index);
-            if (foundShop == null) {
-                continue;
-            }
+            if (foundShop == null) continue;
             ItemStack item = createShopItem(foundShop);
             inventory.setItem(shopItemSlot, item);
             currentPageShops.add(foundShop);
@@ -273,15 +267,65 @@ public class FoundShopsMenu extends PaginatedMenu {
                     final int slot = shopItemSlot;
                     PlayerWarpsPlugin.isFavourite(viewingPlayer, nearestWarp.getWarpName(), isFav -> {
                         if (isFav) {
-                            ItemStack glowing = makeItemGlow(item.clone());
+                            ItemStack starred = item.clone();
+                            ItemMeta im = starred.getItemMeta();
+                            if (im != null) {
+                                String currentName = im.hasDisplayName() ? im.getDisplayName() : null;
+                                im.setDisplayName(withStarPrefix(currentName));
+                                starred.setItemMeta(im);
+                            }
+                            final ItemStack starredFinal = makeItemGlow(starred);
                             Bukkit.getScheduler().runTask(FindItemAddOn.getInstance(), () -> {
-                                inventory.setItem(slot, glowing);
+                                inventory.setItem(slot, starredFinal);
                             });
                         }
                     });
                 }
             }
         }
+    }
+
+    private boolean isFavouriteSync(Player player, String warpName) {
+        AtomicBoolean fav = new AtomicBoolean(false);
+        CountDownLatch latch = new CountDownLatch(1);
+        try {
+            PlayerWarpsPlugin.isFavourite(player, warpName, isFav -> {
+                fav.set(isFav);
+                latch.countDown();
+            });
+            latch.await(200, java.util.concurrent.TimeUnit.MILLISECONDS);
+        } catch (InterruptedException ignored) {
+            Thread.currentThread().interrupt();
+        } catch (Throwable t) {
+        }
+        return fav.get();
+    }
+
+    private String withStarPrefix(String base) {
+        String plain = org.bukkit.ChatColor.stripColor(base == null ? "" : base);
+        if (plain != null && plain.contains("⭐")) return base;
+        return ColorTranslator.translateColorCodes("&6⭐ &r") + (base == null ? "" : base);
+    }
+
+    private void updateNavButtonLabels(int totalItems) {
+        int totalPages = Math.max(1, (int) Math.ceil(totalItems / (double) MAX_ITEMS_PER_PAGE));
+        int currentPage = page + 1;
+        int prevPage = Math.max(1, currentPage - 1);
+        int nextPage = Math.min(totalPages, currentPage + 1);
+        setButtonName(45, "&6« Prev &7(" + prevPage + "/" + totalPages + ")");
+        setButtonName(46, "&6First &7(1/" + totalPages + ")");
+        setButtonName(52, "&6Last &7(" + totalPages + "/" + totalPages + ")");
+        setButtonName(53, "&6Next » &7(" + nextPage + "/" + totalPages + ")");
+    }
+
+    private void setButtonName(int slot, String name) {
+        ItemStack btn = inventory.getItem(slot);
+        if (btn == null || btn.getType() == Material.AIR) return;
+        ItemMeta m = btn.getItemMeta();
+        if (m == null) return;
+        m.setDisplayName(ColorTranslator.translateColorCodes(name));
+        btn.setItemMeta(m);
+        inventory.setItem(slot, btn);
     }
 
     private @NotNull ItemStack createShopItem(@NotNull FoundShopItemModel foundShop) {
@@ -314,6 +358,14 @@ public class FoundShopsMenu extends PaginatedMenu {
         return item;
     }
 
+    private Warp getNearestPlayerWarp(FoundShopItemModel foundShop) {
+        if (FindItemAddOn.getConfigProvider().NEAREST_WARP_MODE == 2 && PlayerWarpsPlugin.getIsEnabled()) {
+            Player viewer = playerMenuUtility.getOwner();
+            return PlayerWarpsUtil.findNearestWarp(foundShop.getShopLocation(), viewer, foundShop.getShopOwner());
+        }
+        return null;
+    }
+
     private void addItemLore(List<String> lore, FoundShopItemModel foundShop) {
         ItemMeta shopItemMeta = foundShop.getItem().getItemMeta();
         if (shopItemMeta != null && shopItemMeta.hasLore()) {
@@ -329,14 +381,26 @@ public class FoundShopsMenu extends PaginatedMenu {
         } else {
             loreTemplate = configProvider.SHOP_GUI_ITEM_LORE;
         }
+        boolean isFav = false;
+        Warp nearestForFav = getNearestPlayerWarp(foundShop);
+        if (nearestForFav != null) {
+            isFav = isFavouriteSync(playerMenuUtility.getOwner(), nearestForFav.getWarpName());
+        }
         for (String loreLine : loreTemplate) {
-            if (loreLine.contains(ShopLorePlaceholdersEnum.NEAREST_WARP.value())) {
+            String processed = loreLine;
+            if (processed.contains(ShopLorePlaceholdersEnum.NEAREST_WARP.value())) {
                 String nearestWarpInfo = getNearestWarpInfo(foundShop);
-                lore.add(ColorTranslator.translateColorCodes(
-                        loreLine.replace(ShopLorePlaceholdersEnum.NEAREST_WARP.value(), nearestWarpInfo)));
+                processed = processed.replace(ShopLorePlaceholdersEnum.NEAREST_WARP.value(), nearestWarpInfo);
             } else {
-                lore.add(ColorTranslator.translateColorCodes(replaceLorePlaceholders(loreLine, foundShop)));
+                processed = replaceLorePlaceholders(processed, foundShop);
             }
+            if (processed.contains("{FAV_TOGGLE}") || processed.toLowerCase(Locale.ROOT).contains("(un)favourite")) {
+                String toggleWord = isFav ? "&cunfavourite" : "&afavourite";
+                processed = processed
+                        .replace("{FAV_TOGGLE}", toggleWord)
+                        .replace("(un)favourite", toggleWord);
+            }
+            lore.add(ColorTranslator.translateColorCodes(processed));
         }
         if (configProvider.TP_PLAYER_DIRECTLY_TO_SHOP
                 && playerMenuUtility.getOwner().hasPermission(PlayerPermsEnum.FINDITEM_SHOPTP.value())) {
@@ -556,14 +620,7 @@ public class FoundShopsMenu extends PaginatedMenu {
     private void handleLastPageClick(InventoryClickEvent event) {
         int listSize = super.playerMenuUtility.getPlayerShopSearchResult().size();
         if (!((index + 1) >= listSize)) {
-            double totalPages = listSize / MAX_ITEMS_PER_PAGE;
-            if (totalPages % 10 == 0) {
-                page = (int) Math.floor(totalPages);
-                Logger.logDebugInfo("Floor page value: " + page);
-            } else {
-                page = (int) Math.ceil(totalPages);
-                Logger.logDebugInfo("Ceiling page value: " + page);
-            }
+            page = Math.max(0, (listSize - 1) / MAX_ITEMS_PER_PAGE);
             super.open(super.playerMenuUtility.getPlayerShopSearchResult());
         } else {
             if (!StringUtils.isEmpty(configProvider.SHOP_NAV_LAST_PAGE_ALERT_MSG)) {

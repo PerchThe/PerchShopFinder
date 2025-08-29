@@ -26,10 +26,7 @@ public class WhereToSellCommand implements CommandExecutor {
     private final CmdExecutorHandler cmdExecutor;
     private final String sellCommand;
 
-    // --- Friendly name map for potion effects (ALL UPPERCASE) ---
     private static final Map<String, PotionEffectType> FRIENDLY_POTION_EFFECTS = buildFriendlyPotionEffectMap();
-
-    // --- Book name to Enchantment map for robust matching ---
     private static final Map<String, Enchantment> BOOK_NAME_TO_ENCHANTMENT = buildBookNameToEnchantmentMap();
 
     private static Map<String, PotionEffectType> buildFriendlyPotionEffectMap() {
@@ -74,23 +71,35 @@ public class WhereToSellCommand implements CommandExecutor {
         return map;
     }
 
-    // --- Book name mapping for enchantments ---
     private static Map<String, Enchantment> buildBookNameToEnchantmentMap() {
         Map<String, String> special = new HashMap<>();
         special.put("BINDING_CURSE", "CURSEOFBINDING");
         special.put("VANISHING_CURSE", "CURSEOFVANISHING");
-        // Add more special cases as needed
 
         Map<String, Enchantment> map = new HashMap<>();
         for (Enchantment ench : Enchantment.values()) {
-            String key = ench.getKey().getKey().toUpperCase();
+            String key = ench.getKey().getKey().toUpperCase(Locale.ROOT);
             String bookName = special.getOrDefault(key, key.replace("_", ""));
-            map.put(bookName.toLowerCase(), ench);
-            // Add aliases for curse books
+            map.put(bookName.toLowerCase(Locale.ROOT), ench);
             if (bookName.equals("CURSEOFBINDING")) map.put("bindingcurse", ench);
             if (bookName.equals("CURSEOFVANISHING")) map.put("vanishingcurse", ench);
         }
         return map;
+    }
+
+    private static String[] remapArtAliases(String[] args) {
+        if (args == null || args.length == 0) return args;
+        String a0 = args[0].toLowerCase(Locale.ROOT);
+        switch (a0) {
+            case "art":
+                return new String[] { "lore:copyright", "lore:artwork" };
+            case "artmap":
+                return new String[] { "lore:artwork" };
+            case "mapart":
+                return new String[] { "lore:copyright" };
+            default:
+                return args;
+        }
     }
 
     public WhereToSellCommand() {
@@ -126,7 +135,10 @@ public class WhereToSellCommand implements CommandExecutor {
             return true;
         }
 
+        // --- Apply alias remap before building searchArgs ---
+        args = remapArtAliases(args);
         String[] searchArgs = args.clone();
+
         if (firstArg.equalsIgnoreCase("hand")) {
             Material handMat = player.getInventory().getItemInMainHand().getType();
             if (handMat == Material.AIR) {
@@ -176,9 +188,9 @@ public class WhereToSellCommand implements CommandExecutor {
                 singleItem = singleItem.trim();
                 if (singleItem.isEmpty()) continue;
 
-                if (singleItem.toLowerCase().startsWith("lore:")) {
+                if (singleItem.toLowerCase(Locale.ROOT).startsWith("lore:")) {
                     result.anyValid = true;
-                    String loreSearch = singleItem.substring(5).toLowerCase();
+                    String loreSearch = singleItem.substring(5).toLowerCase(Locale.ROOT);
                     List<FoundShopItemModel> loreMatches = ((List<FoundShopItemModel>) FindItemAddOn.getQsApiInstance()
                             .fetchAllItemsFromAllShops(!isSelling, player))
                             .stream()
@@ -188,7 +200,7 @@ public class WhereToSellCommand implements CommandExecutor {
                                     List<String> lore = item.getItemMeta().getLore();
                                     if (lore != null) {
                                         for (String line : lore) {
-                                            if (line.toLowerCase().contains(loreSearch)) {
+                                            if (line.toLowerCase(Locale.ROOT).contains(loreSearch)) {
                                                 return true;
                                             }
                                         }
@@ -253,7 +265,6 @@ public class WhereToSellCommand implements CommandExecutor {
                     continue;
                 }
 
-                // --- Special case: /wts tags or /wts tag shows only renamed name tags ---
                 if (singleItem.equalsIgnoreCase("tags") || singleItem.equalsIgnoreCase("tag")) {
                     result.anyValid = true;
                     List<FoundShopItemModel> allNameTags = (List<FoundShopItemModel>) FindItemAddOn.getQsApiInstance()
@@ -288,15 +299,12 @@ public class WhereToSellCommand implements CommandExecutor {
                     continue;
                 }
 
-
-                // --- Material or display name support ---
-                Material mat = Material.getMaterial(singleItem.toUpperCase());
+                Material mat = Material.getMaterial(singleItem.toUpperCase(Locale.ROOT));
                 if (mat != null && mat.isItem()) {
                     result.anyValid = true;
                     List<FoundShopItemModel> foundItems = (List<FoundShopItemModel>) FindItemAddOn.getQsApiInstance()
                             .findItemBasedOnTypeFromAllShops(new ItemStack(mat), !isSelling, player);
 
-                    // If searching for NAME_TAG, filter out renamed ones (vanilla only)
                     if (mat == Material.NAME_TAG) {
                         foundItems = foundItems.stream()
                                 .filter(shopItem -> {
@@ -305,7 +313,6 @@ public class WhereToSellCommand implements CommandExecutor {
                                 })
                                 .collect(Collectors.toList());
                     }
-                    // If searching for paper, filter out renamed ones (vanilla only)
                     if (mat == Material.PAPER) {
                         foundItems = foundItems.stream()
                                 .filter(shopItem -> {
@@ -314,7 +321,6 @@ public class WhereToSellCommand implements CommandExecutor {
                                 })
                                 .collect(Collectors.toList());
                     }
-                    // If searching for MAP, filter out renamed ones (vanilla only)
                     if (mat == Material.MAP) {
                         foundItems = foundItems.stream()
                                 .filter(shopItem -> {
@@ -323,7 +329,6 @@ public class WhereToSellCommand implements CommandExecutor {
                                 })
                                 .collect(Collectors.toList());
                     }
-                    // If searching for BOOK, filter out renamed ones (vanilla only)
                     if (mat == Material.BOOK) {
                         foundItems = foundItems.stream()
                                 .filter(shopItem -> {
@@ -365,16 +370,13 @@ public class WhereToSellCommand implements CommandExecutor {
         }
     }
 
-    // Utility method to map user input to Bukkit Enchantment (now supports book names and aliases)
     private static Enchantment getEnchantmentByName(String name) {
-        String key = name.toLowerCase().replace("_", "").replace(" ", "");
-        // Try book name mapping first
+        String key = name.toLowerCase(Locale.ROOT).replace("_", "").replace(" ", "");
         if (BOOK_NAME_TO_ENCHANTMENT.containsKey(key)) {
             return BOOK_NAME_TO_ENCHANTMENT.get(key);
         }
-        // Fallback to internal key and Bukkit name
         for (Enchantment ench : Enchantment.values()) {
-            String enchKey = ench.getKey().getKey().toLowerCase().replace("_", "").replace(" ", "");
+            String enchKey = ench.getKey().getKey().toLowerCase(Locale.ROOT).replace("_", "").replace(" ", "");
             if (enchKey.equals(key) || ench.getName().equalsIgnoreCase(name)) {
                 return ench;
             }
@@ -382,17 +384,14 @@ public class WhereToSellCommand implements CommandExecutor {
         return null;
     }
 
-    // Utility method to map user input to Bukkit PotionEffectType, including friendly names (ALL UPPERCASE)
     private static PotionEffectType getPotionEffectByName(String name) {
-        String key = name.toUpperCase().replace("_", "").replace(" ", "");
-        // Check friendly names first
+        String key = name.toUpperCase(Locale.ROOT).replace("_", "").replace(" ", "");
         if (FRIENDLY_POTION_EFFECTS.containsKey(key)) {
             return FRIENDLY_POTION_EFFECTS.get(key);
         }
-        // Fallback to Bukkit's names
         for (PotionEffectType effect : PotionEffectType.values()) {
             if (effect == null) continue;
-            String effectKey = effect.getName().toUpperCase().replace("_", "").replace(" ", "");
+            String effectKey = effect.getName().toUpperCase(Locale.ROOT).replace("_", "").replace(" ", "");
             if (effectKey.equals(key)) {
                 return effect;
             }

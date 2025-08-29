@@ -8,12 +8,14 @@ import org.bukkit.command.CommandSender;
 import org.bukkit.command.TabCompleter;
 import org.bukkit.entity.Player;
 
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.List;
-import java.util.Set;
+import java.util.*;
+import java.util.stream.Collectors;
 
 public class ExcludeWarpCommand implements CommandExecutor, TabCompleter {
+
+    private static String norm(String s) {
+        return s == null ? "" : s.replaceAll("[^A-Za-z0-9]", "").toLowerCase(Locale.ROOT);
+    }
 
     @Override
     public boolean onCommand(CommandSender sender, Command command, String label, String[] args) {
@@ -24,39 +26,46 @@ public class ExcludeWarpCommand implements CommandExecutor, TabCompleter {
         Player player = (Player) sender;
 
         if (args.length < 1) {
-            player.sendMessage("Usage: /" + label + " <warpname>");
+            player.sendMessage("Usage: /" + command.getName() + " <warpname>");
             return true;
         }
 
-        String warpName = args[0];
-        List<String> playerWarps = PlayerWarpsPlugin.getPlayerWarpNames(player);
-        boolean ownsWarp = playerWarps.stream().anyMatch(w -> w.equalsIgnoreCase(warpName));
+        String rawInputName = String.join(" ", args);
+        String inputKey = norm(rawInputName);
 
-        if (!ownsWarp) {
+        List<String> playerWarps = PlayerWarpsPlugin.getPlayerWarpNames(player);
+        String ownedDisplayName = playerWarps.stream()
+                .filter(w -> norm(w).equals(inputKey))
+                .findFirst()
+                .orElse(null);
+
+        if (ownedDisplayName == null) {
             player.sendMessage("You do not own this warp.");
             return true;
         }
 
-        // Defensive: check if ExcludedWarpsUtil is initialized
         Set<String> excluded = ExcludedWarpsUtil.getExcludedWarps();
         if (excluded == null) {
             player.sendMessage("Internal error: Excluded warps not initialized. Please contact an admin.");
             return true;
         }
 
-        if (label.equalsIgnoreCase("excludewarp")) {
-            if (excluded.contains(warpName.toLowerCase())) {
-                player.sendMessage("Warp '" + warpName + "' is already excluded from all searches.");
+        String cmd = command.getName().toLowerCase(Locale.ROOT); // use command, not label
+        String ownedKey = norm(ownedDisplayName);
+
+        if (cmd.equals("excludewarp")) {
+            if (excluded.contains(ownedKey)) {
+                player.sendMessage("Warp '" + ownedDisplayName + "' is already excluded from all searches.");
             } else {
-                ExcludedWarpsUtil.addExcludedWarp(warpName);
-                player.sendMessage("Warp '" + warpName + "' is now excluded from all searches.");
+                ExcludedWarpsUtil.addExcludedWarp(ownedKey); // store normalized key
+                player.sendMessage("Warp '" + ownedDisplayName + "' is now excluded from all searches.");
             }
-        } else if (label.equalsIgnoreCase("includewarp")) {
-            if (!excluded.contains(warpName.toLowerCase())) {
-                player.sendMessage("Warp '" + warpName + "' is not excluded.");
+        } else if (cmd.equals("includewarp")) {
+            if (!excluded.contains(ownedKey)) {
+                player.sendMessage("Warp '" + ownedDisplayName + "' is not excluded.");
             } else {
-                ExcludedWarpsUtil.removeExcludedWarp(warpName);
-                player.sendMessage("Warp '" + warpName + "' is now included in all searches.");
+                ExcludedWarpsUtil.removeExcludedWarp(ownedKey);
+                player.sendMessage("Warp '" + ownedDisplayName + "' is now included in all searches.");
             }
         } else {
             player.sendMessage("Unknown command. Use /excludewarp or /includewarp.");
@@ -71,15 +80,12 @@ public class ExcludeWarpCommand implements CommandExecutor, TabCompleter {
         Player player = (Player) sender;
 
         if (args.length == 1) {
-            String partial = args[0].toLowerCase();
+            String partial = args[0];
+            String partialKey = norm(partial);
             List<String> warps = PlayerWarpsPlugin.getPlayerWarpNames(player);
-            List<String> matches = new ArrayList<>();
-            for (String warp : warps) {
-                if (warp.toLowerCase().startsWith(partial)) {
-                    matches.add(warp);
-                }
-            }
-            return matches;
+            return warps.stream()
+                    .filter(w -> norm(w).startsWith(partialKey))
+                    .collect(Collectors.toList());
         }
         return Collections.emptyList();
     }
