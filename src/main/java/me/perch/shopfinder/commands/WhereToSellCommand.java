@@ -298,6 +298,26 @@ public class WhereToSellCommand implements CommandExecutor {
                     }
                     continue;
                 }
+                if (singleItem.equalsIgnoreCase("banner")) {
+                    result.anyValid = true;
+
+                    List<Material> bannerVariants = Arrays.stream(Material.values())
+                            .filter(Material::isItem) // avoid block-only materials
+                            .filter(m -> {
+                                String n = m.name();
+                                return n.endsWith("_BANNER") && !n.endsWith("_WALL_BANNER");
+                            })
+                            .collect(Collectors.toList());
+
+                    for (Material variant : bannerVariants) {
+                        List<FoundShopItemModel> variantMatches =
+                                (List<FoundShopItemModel>) FindItemAddOn.getQsApiInstance()
+                                        .findItemBasedOnTypeFromAllShops(new ItemStack(variant), isSelling, player);
+                        result.allResults.addAll(variantMatches);
+                    }
+                    continue;
+                }
+
 
                 Material mat = Material.getMaterial(singleItem.toUpperCase(Locale.ROOT));
                 if (mat != null && mat.isItem()) {
@@ -334,6 +354,14 @@ public class WhereToSellCommand implements CommandExecutor {
                                 .filter(shopItem -> {
                                     ItemStack item = shopItem.getItemStack();
                                     return item != null && item.getType() == Material.BOOK && (!item.hasItemMeta() || !item.getItemMeta().hasDisplayName());
+                                })
+                                .collect(Collectors.toList());
+                    }
+                    if (mat == Material.CHEST) {
+                        foundItems = foundItems.stream()
+                                .filter(shopItem -> {
+                                    ItemStack item = shopItem.getItemStack();
+                                    return item != null && item.getType() == Material.CHEST && (!item.hasItemMeta() || !item.getItemMeta().hasDisplayName());
                                 })
                                 .collect(Collectors.toList());
                     }

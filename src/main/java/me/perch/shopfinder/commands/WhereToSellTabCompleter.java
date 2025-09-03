@@ -332,6 +332,7 @@ public class WhereToSellTabCompleter implements TabCompleter {
         if ("art".startsWith(toComplete)) completions.add("art");
         if ("artmap".startsWith(toComplete)) completions.add("artmap");
         if ("mapart".startsWith(toComplete)) completions.add("mapart");
+        if ("banner".startsWith(toComplete)) completions.add("banner");
 
         completions.addAll(enchantBookNames.stream()
                 .filter(e -> e.toLowerCase().startsWith(toComplete))

@@ -225,6 +225,19 @@ public class WhereToGetCommand implements CommandExecutor {
                     continue;
                 }
 
+                if (singleItem.equalsIgnoreCase("banner")) {
+                    List<Material> bannerVariants = Arrays.stream(Material.values())
+                            .filter(m -> m.name().endsWith("_BANNER") && !m.name().endsWith("_WALL_BANNER"))
+                            .collect(Collectors.toList());
+                    for (Material variant : bannerVariants) {
+                        List<FoundShopItemModel> variantMatches = (List<FoundShopItemModel>) FindItemAddOn.getQsApiInstance()
+                                .findItemBasedOnTypeFromAllShops(new ItemStack(variant), true, player);
+                        foundShops.addAll(variantMatches);
+                    }
+                    continue;
+                }
+
+
                 Material mat = Material.getMaterial(singleItem.toUpperCase(Locale.ROOT));
                 if (mat != null && mat.isItem()) {
                     List<FoundShopItemModel> foundItems = (List<FoundShopItemModel>) FindItemAddOn.getQsApiInstance()
