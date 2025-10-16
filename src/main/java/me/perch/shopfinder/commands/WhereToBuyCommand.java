@@ -91,6 +91,7 @@ public class WhereToBuyCommand implements CommandExecutor {
         if (a0.equals("art")) return "wtb_art";
         if (a0.equals("artmap")) return "wtb_artmap";
         if (a0.equals("mapart")) return "wtb_mapart";
+        if (a0.equals("playtime")) return "wtb_playtime";
         return null;
     }
 
@@ -100,6 +101,8 @@ public class WhereToBuyCommand implements CommandExecutor {
         switch (a0) {
             case "art":
                 return new String[] { "lore:copyright", "lore:artwork" };
+            case "playtime":
+                return new String[] { "lore:playtime" };
             case "artmap":
                 return new String[] { "lore:artwork" };
             case "mapart":
@@ -341,6 +344,14 @@ public class WhereToBuyCommand implements CommandExecutor {
                                 .filter(shopItem -> {
                                     ItemStack item = shopItem.getItemStack();
                                     return item != null && item.getType() == Material.NAME_TAG && (!item.hasItemMeta() || !item.getItemMeta().hasDisplayName());
+                                })
+                                .collect(Collectors.toList());
+                    }
+                    if (mat == Material.TRIPWIRE_HOOK) {
+                        foundItems = foundItems.stream()
+                                .filter(shopItem -> {
+                                    ItemStack item = shopItem.getItemStack();
+                                    return item != null && item.getType() == Material.TRIPWIRE_HOOK && (!item.hasItemMeta() || !item.getItemMeta().hasDisplayName());
                                 })
                                 .collect(Collectors.toList());
                     }

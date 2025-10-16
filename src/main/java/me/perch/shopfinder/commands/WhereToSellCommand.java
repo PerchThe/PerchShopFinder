@@ -95,6 +95,8 @@ public class WhereToSellCommand implements CommandExecutor {
                 return new String[] { "lore:copyright", "lore:artwork" };
             case "artmap":
                 return new String[] { "lore:artwork" };
+            case "playtime":
+                return new String[] { "lore:playtime" };
             case "mapart":
                 return new String[] { "lore:copyright" };
             default:
@@ -330,6 +332,14 @@ public class WhereToSellCommand implements CommandExecutor {
                                 .filter(shopItem -> {
                                     ItemStack item = shopItem.getItemStack();
                                     return item != null && item.getType() == Material.NAME_TAG && (!item.hasItemMeta() || !item.getItemMeta().hasDisplayName());
+                                })
+                                .collect(Collectors.toList());
+                    }
+                    if (mat == Material.TRIPWIRE_HOOK) {
+                        foundItems = foundItems.stream()
+                                .filter(shopItem -> {
+                                    ItemStack item = shopItem.getItemStack();
+                                    return item != null && item.getType() == Material.TRIPWIRE_HOOK && (!item.hasItemMeta() || !item.getItemMeta().hasDisplayName());
                                 })
                                 .collect(Collectors.toList());
                     }

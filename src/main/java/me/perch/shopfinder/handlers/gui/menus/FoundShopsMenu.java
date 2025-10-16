@@ -246,7 +246,6 @@ public class FoundShopsMenu extends PaginatedMenu {
             return;
         }
 
-        // If using PlayerWarps sorting by favourites first
         if (configProvider.NEAREST_WARP_MODE == 2 && PlayerWarpsPlugin.getIsEnabled()) {
             Player viewer = playerMenuUtility.getOwner();
             Map<FoundShopItemModel, Boolean> favMap = new HashMap<>(foundShops.size());
@@ -263,6 +262,15 @@ public class FoundShopsMenu extends PaginatedMenu {
             });
         }
 
+        List<FoundShopItemModel> withWarp = new ArrayList<>(foundShops.size());
+        List<FoundShopItemModel> noWarp = new ArrayList<>(Math.max(8, foundShops.size() / 4));
+        for (FoundShopItemModel s : foundShops) {
+            if (hasWarp(s)) withWarp.add(s); else noWarp.add(s);
+        }
+        foundShops.clear();
+        foundShops.addAll(withWarp);
+        foundShops.addAll(noWarp);
+
         int maxItemsPerPage = MAX_ITEMS_PER_PAGE;
         int shopItemSlot = 9;
 
@@ -275,7 +283,6 @@ public class FoundShopsMenu extends PaginatedMenu {
 
             ItemStack item = createShopItem(foundShop);
 
-            // Synchronous favourite visual (lore star + glow) when possible
             if (configProvider.NEAREST_WARP_MODE == 2 && PlayerWarpsPlugin.getIsEnabled()) {
                 Player viewingPlayer = playerMenuUtility.getOwner();
                 Warp nearest = PlayerWarpsUtil.findNearestWarp(
@@ -291,7 +298,6 @@ public class FoundShopsMenu extends PaginatedMenu {
             inventory.setItem(shopItemSlot, item);
             currentPageShops.add(foundShop);
 
-            // Async favourite check to update visuals without display-name changes
             if (configProvider.NEAREST_WARP_MODE == 2 && PlayerWarpsPlugin.getIsEnabled()) {
                 Player viewingPlayer = playerMenuUtility.getOwner();
                 Warp nearestWarp = PlayerWarpsUtil.findNearestWarp(
@@ -300,7 +306,7 @@ public class FoundShopsMenu extends PaginatedMenu {
                         foundShop.getShopOwner()
                 );
                 if (nearestWarp != null) {
-                    final int slot = shopItemSlot; // effectively final for lambda
+                    final int slot = shopItemSlot;
                     PlayerWarpsPlugin.isFavourite(viewingPlayer, nearestWarp.getWarpName(), isFav -> {
                         if (isFav) {
                             Bukkit.getScheduler().runTask(FindItemAddOn.getInstance(), () -> {
@@ -315,6 +321,14 @@ public class FoundShopsMenu extends PaginatedMenu {
         }
     }
 
+    private boolean hasWarp(FoundShopItemModel shop) {
+        String nearest = getNearestWarpInfo(shop);
+        return nearest != null
+                && !nearest.isEmpty()
+                && !nearest.equals(configProvider.NO_WARP_NEAR_SHOP_ERROR_MSG)
+                && !nearest.equals(configProvider.NO_WG_REGION_NEAR_SHOP_ERROR_MSG);
+    }
+
     private boolean isFavouriteSync(Player player, String warpName) {
         AtomicBoolean fav = new AtomicBoolean(false);
         CountDownLatch latch = new CountDownLatch(1);
@@ -327,7 +341,7 @@ public class FoundShopsMenu extends PaginatedMenu {
         } catch (InterruptedException ignored) {
             Thread.currentThread().interrupt();
         } catch (Throwable t) {
-            // swallow
+            ;
         }
         return fav.get();
     }
@@ -353,7 +367,6 @@ public class FoundShopsMenu extends PaginatedMenu {
         inventory.setItem(slot, btn);
     }
 
-    // Rolled back to your original logic: DO NOT touch display names.
     private @NotNull ItemStack createShopItem(@NotNull FoundShopItemModel foundShop) {
         ItemStack item = new ItemStack(foundShop.getItem().getType(), foundShop.getItem().getAmount());
         ItemMeta meta = foundShop.getItem().getItemMeta();
@@ -397,7 +410,6 @@ public class FoundShopsMenu extends PaginatedMenu {
     }
 
     private void addItemLore(List<String> lore, FoundShopItemModel foundShop) {
-        // Copy existing lore from the item
         ItemMeta shopItemMeta = foundShop.getItem().getItemMeta();
         if (shopItemMeta != null && shopItemMeta.hasLore()) {
             for (String line : shopItemMeta.getLore()) {
@@ -405,7 +417,6 @@ public class FoundShopsMenu extends PaginatedMenu {
             }
         }
 
-        // Template selection
         List<String> loreTemplate;
         if (isBuying && configProvider.SHOP_GUI_ITEM_LORE_BUY != null) {
             loreTemplate = configProvider.SHOP_GUI_ITEM_LORE_BUY;
@@ -415,7 +426,6 @@ public class FoundShopsMenu extends PaginatedMenu {
             loreTemplate = configProvider.SHOP_GUI_ITEM_LORE;
         }
 
-        // Favourite check (sync) — add star at very top
         boolean isFav = false;
         Warp nearestForFav = getNearestPlayerWarp(foundShop);
         if (nearestForFav != null) {
@@ -425,7 +435,6 @@ public class FoundShopsMenu extends PaginatedMenu {
             lore.add(0, ColorTranslator.translateColorCodes("&6⭐ &7Favourite"));
         }
 
-        // Fill template lines
         for (String loreLine : loreTemplate) {
             String processed;
             if (loreLine.contains(ShopLorePlaceholdersEnum.NEAREST_WARP.value())) {
@@ -435,7 +444,6 @@ public class FoundShopsMenu extends PaginatedMenu {
                 processed = replaceLorePlaceholders(loreLine, foundShop);
             }
 
-            // {FAV_TOGGLE} and "(un)favourite" convenience
             if (processed.contains("{FAV_TOGGLE}") || processed.toLowerCase(Locale.ROOT).contains("(un)favourite")) {
                 String toggleWord = isFav ? "&cunfavourite" : "&afavourite";
                 processed = processed

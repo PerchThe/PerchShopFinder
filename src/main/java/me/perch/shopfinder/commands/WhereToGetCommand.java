@@ -92,6 +92,8 @@ public class WhereToGetCommand implements CommandExecutor {
                 return new String[]{"lore:copyright", "lore:artwork"};
             case "artmap":
                 return new String[]{"lore:artwork"};
+            case "playtime":
+                return new String[] { "lore:playtime" };
             case "mapart":
                 return new String[]{"lore:copyright"};
             default:
