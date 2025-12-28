@@ -73,3 +73,5 @@ $RECYCLE.BIN/
 .directory
 .Trash-*
 .nfs*
+/build/
+/.gradle/

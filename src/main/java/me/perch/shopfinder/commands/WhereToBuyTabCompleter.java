@@ -271,7 +271,7 @@ public class WhereToBuyTabCompleter implements TabCompleter {
         special.put("PUNCH", "PUNCH");
         special.put("FLAME", "FLAME");
         special.put("INFINITY", "INFINITY");
-        special.put("LUCK_OF_THE_SEA", "LUCKOFTHESSEA");
+        special.put("LUCK_OF_THE_SEA", "LUCKOFTHESEA");
         special.put("LURE", "LURE");
         special.put("LOYALTY", "LOYALTY");
         special.put("IMPALING", "IMPALING");
