@@ -19,25 +19,14 @@ repositories {
     maven { url 'https://repo.essentialsx.net/snapshots/' }
     maven { url 'https://repo.olziedev.com/' }
     maven { url 'https://maven.enginehub.org/repo/' }
-
-    // PlaceholderAPI official repo
-    maven { url 'https://repo.extendedclip.com/releases/' } // <-- added
+    maven { url 'https://repo.extendedclip.com/releases/' }
 }
 
 dependencies {
-    // Core server APIs (never shade these)
     compileOnly "org.spigotmc:spigot-api:1.21.5-R0.1-SNAPSHOT"
-
-    // PlaceholderAPI (never shade)
-    compileOnly "me.clip:placeholderapi:2.11.6" // <-- added
-
-    // PaperLib for async tasks (safe to shade)
+    compileOnly "me.clip:placeholderapi:2.11.6"
     implementation "io.papermc:paperlib:1.0.7"
-
-    // ProtocolLib for packet handling (never shade)
     compileOnly "com.github.dmulloy2:ProtocolLib:5.2.0"
-
-    // QuickShop Hikari (never shade)
     compileOnly("com.ghostchu:quickshop-api:6.2.0.9-RELEASE-1") {
         exclude group: 'org.jetbrains', module: 'annotations'
         exclude group: 'net.kyori', module: 'adventure-platform-bukkit'
@@ -47,14 +36,8 @@ dependencies {
         exclude group: 'me.xanium', module: 'GemsEconomy'
         exclude group: 'com.ghostchu', module: 'quickshop-common'
     }
-
-    // EssentialsX (never shade)
     compileOnly "net.essentialsx:EssentialsX:2.21.0"
-
-    // PlayerWarps API (never shade)
     compileOnly "com.olziedev:playerwarps-api:7.7.1"
-
-    // WorldGuard (never shade)
     compileOnly("com.sk89q.worldguard:worldguard-bukkit:7.0.7") {
         exclude group: 'com.google.code.findbugs', module: 'annotations'
         exclude group: 'net.java.truecommons', module: 'truecommons-logging'
@@ -70,45 +53,29 @@ dependencies {
         exclude group: 'net.java.truevfs', module: 'truevfs-comp-zip'
         exclude group: 'net.java.truevfs', module: 'truevfs-comp-tardriver'
     }
-
-    // Utility libraries (safe to shade)
     implementation "com.google.code.gson:gson:2.10"
     implementation "org.jetbrains:annotations:24.1.0"
     implementation "org.apache.commons:commons-lang3:3.14.0"
-
-    // Lombok (compileOnly, not included in final JAR)
     compileOnly "org.projectlombok:lombok:1.18.34"
     annotationProcessor "org.projectlombok:lombok:1.18.34"
-
-    // QuickShop-Hikari (local JAR, if needed)
     compileOnly files('lib/QuickShop-Hikari-6.2.0.9-RELEASE-1.jar')
-
-    // SimpAPI (SHADE THIS!)
     implementation "com.github.KodySimpson:SimpAPI:4.6.1"
-
-    // Adventure API (never shade)
     compileOnly "net.kyori:adventure-api:4.16.0"
-
-    // EasySQL (never shade)
     compileOnly "cc.carm.lib:easysql-api:0.4.7"
-
-    // GriefPrevention (never shade)
     compileOnly "com.github.GriefPrevention:GriefPrevention:16.18.4"
-
-    // GPFlags (local JAR, if you need it)
     compileOnly files('lib/GPFlags-5.13.4.jar')
+    compileOnly "com.github.MilkBowl:VaultAPI:1.7"
 }
 
 shadowJar {
     archiveClassifier.set('all')
-    // Relocate SimpAPI to avoid conflicts with other plugins
     relocate 'me.kodysimpson.simpapi', 'perch.finditem.shaded.simpapi'
 }
 
 tasks.register('copyPluginJar', Copy) {
     dependsOn shadowJar
     from("$buildDir/libs/PerchShopFinder-${version}-all.jar")
-    into "/Users/kayalambrechts/IdeaProjects/PerchShopFinder" // <-- Change this to your plugins directory
+    into "/Users/kayalambrechts/IdeaProjects/PerchShopFinder"
 }
 
 processResources {

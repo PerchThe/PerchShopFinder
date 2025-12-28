@@ -4,9 +4,11 @@ import me.perch.shopfinder.FindItemAddOn;
 import me.perch.shopfinder.handlers.command.CmdExecutorHandler;
 import me.perch.shopfinder.models.FoundShopItemModel;
 import me.kodysimpson.simpapi.colors.ColorTranslator;
+import net.milkbowl.vault.economy.Economy;
 import org.apache.commons.lang3.StringUtils;
 import org.bukkit.Bukkit;
 import org.bukkit.Material;
+import org.bukkit.OfflinePlayer;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandExecutor;
 import org.bukkit.command.CommandSender;
@@ -15,16 +17,21 @@ import org.bukkit.entity.Player;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.meta.EnchantmentStorageMeta;
 import org.bukkit.inventory.meta.PotionMeta;
+import org.bukkit.plugin.RegisteredServiceProvider;
 import org.bukkit.plugin.java.JavaPlugin;
 import org.bukkit.potion.PotionEffectType;
 
+import java.lang.reflect.Method;
 import java.util.*;
+import java.util.concurrent.CompletableFuture;
 import java.util.stream.Collectors;
 
 public class WhereToSellCommand implements CommandExecutor {
 
     private final CmdExecutorHandler cmdExecutor;
     private final String sellCommand;
+
+    private static Economy ECO;
 
     private static final Map<String, PotionEffectType> FRIENDLY_POTION_EFFECTS = buildFriendlyPotionEffectMap();
     private static final Map<String, Enchantment> BOOK_NAME_TO_ENCHANTMENT = buildBookNameToEnchantmentMap();
@@ -99,6 +106,8 @@ public class WhereToSellCommand implements CommandExecutor {
                 return new String[] { "lore:playtime" };
             case "mapart":
                 return new String[] { "lore:copyright" };
+            case "claimblocks":
+                return new String[] { "lore:claims" };
             default:
                 return args;
         }
@@ -137,7 +146,6 @@ public class WhereToSellCommand implements CommandExecutor {
             return true;
         }
 
-        // --- Apply alias remap before building searchArgs ---
         args = remapArtAliases(args);
         String[] searchArgs = args.clone();
 
@@ -153,30 +161,6 @@ public class WhereToSellCommand implements CommandExecutor {
 
         if (firstArg.equalsIgnoreCase("unbreakable")) {
             cmdExecutor.handleShopSearchForUnbreakable(sellCommand, sender);
-            return true;
-        }
-
-        if (firstArg.equals("*")) {
-            Bukkit.getScheduler().runTaskAsynchronously(JavaPlugin.getProvidingPlugin(getClass()), () -> {
-                boolean isSelling = sellCommand.equalsIgnoreCase("TO_SELL") ||
-                        sellCommand.equalsIgnoreCase(FindItemAddOn.getConfigProvider().FIND_ITEM_TO_SELL_AUTOCOMPLETE);
-
-                List<FoundShopItemModel> allItems = (List<FoundShopItemModel>) FindItemAddOn.getQsApiInstance()
-                        .fetchAllItemsFromAllShops(!isSelling, player);
-
-                Bukkit.getScheduler().runTask(JavaPlugin.getProvidingPlugin(getClass()), () -> {
-                    if (allItems.isEmpty()) {
-                        player.sendMessage(ColorTranslator.translateColorCodes("&cNo items found to sell."));
-                        player.performCommand("wtsmenu");
-                    } else {
-                        allItems.sort(
-                                Comparator.comparing((FoundShopItemModel m) -> m.getItem().getType().name())
-                                        .thenComparing(Comparator.comparingDouble(FoundShopItemModel::getShopPrice).reversed())
-                        );
-                        cmdExecutor.openShopMenuDescending(player, allItems, false, FindItemAddOn.getConfigProvider().NO_SHOP_FOUND_MSG, "wtsmenu");
-                    }
-                });
-            });
             return true;
         }
 
@@ -304,7 +288,7 @@ public class WhereToSellCommand implements CommandExecutor {
                     result.anyValid = true;
 
                     List<Material> bannerVariants = Arrays.stream(Material.values())
-                            .filter(Material::isItem) // avoid block-only materials
+                            .filter(Material::isItem)
                             .filter(m -> {
                                 String n = m.name();
                                 return n.endsWith("_BANNER") && !n.endsWith("_WALL_BANNER");
@@ -319,7 +303,6 @@ public class WhereToSellCommand implements CommandExecutor {
                     }
                     continue;
                 }
-
 
                 Material mat = Material.getMaterial(singleItem.toUpperCase(Locale.ROOT));
                 if (mat != null && mat.isItem()) {
@@ -400,12 +383,59 @@ public class WhereToSellCommand implements CommandExecutor {
     }
 
     private void handleShopResults(Player player, ShopSearchResult result) {
+        boolean isSelling = sellCommand.equalsIgnoreCase("TO_SELL") ||
+                sellCommand.equalsIgnoreCase(FindItemAddOn.getConfigProvider().FIND_ITEM_TO_SELL_AUTOCOMPLETE);
+
         if (!result.anyValid) {
             player.sendMessage(ColorTranslator.translateColorCodes("&cInvalid item, redirecting to menu."));
             player.performCommand("wtsmenu");
-        } else {
-            cmdExecutor.openShopMenuDescending(player, result.allResults, false, FindItemAddOn.getConfigProvider().NO_SHOP_FOUND_MSG, "wtsmenu");
+            return;
         }
+
+        if (!isSelling) {
+            cmdExecutor.openShopMenuDescending(player, result.allResults, false, FindItemAddOn.getConfigProvider().NO_SHOP_FOUND_MSG, "wtsmenu");
+            return;
+        }
+
+        Bukkit.getScheduler().runTaskAsynchronously(JavaPlugin.getProvidingPlugin(getClass()), () -> {
+            Set<UUID> owners = new HashSet<>();
+            for (FoundShopItemModel m : result.allResults) {
+                OfflinePlayer op = resolveOwner(m);
+                if (op != null) owners.add(op.getUniqueId());
+            }
+
+            CompletableFuture<Map<UUID, Double>> balFuture = new CompletableFuture<>();
+            Bukkit.getScheduler().runTask(JavaPlugin.getProvidingPlugin(getClass()), () -> {
+                ensureEconomy();
+                Map<UUID, Double> map = new HashMap<>();
+                if (ECO != null) {
+                    for (UUID id : owners) {
+                        try {
+                            OfflinePlayer op = Bukkit.getOfflinePlayer(id);
+                            if (op == null) continue;
+                            if (!op.hasPlayedBefore() && !op.isOnline()) continue;
+                            double bal;
+                            try {
+                                bal = ECO.getBalance(op);
+                            } catch (Throwable t) {
+                                continue;
+                            }
+                            if (bal < 0D) bal = 0D;
+                            map.put(id, bal);
+                        } catch (Throwable ignored) {
+                        }
+                    }
+                }
+                balFuture.complete(map);
+            });
+
+            Map<UUID, Double> balances = balFuture.join();
+            List<FoundShopItemModel> filtered = filterByBalances(result.allResults, balances);
+
+            Bukkit.getScheduler().runTask(JavaPlugin.getProvidingPlugin(getClass()), () -> {
+                cmdExecutor.openShopMenuDescending(player, filtered, false, FindItemAddOn.getConfigProvider().NO_SHOP_FOUND_MSG, "wtsmenu");
+            });
+        });
     }
 
     private static Enchantment getEnchantmentByName(String name) {
@@ -432,6 +462,88 @@ public class WhereToSellCommand implements CommandExecutor {
             String effectKey = effect.getName().toUpperCase(Locale.ROOT).replace("_", "").replace(" ", "");
             if (effectKey.equals(key)) {
                 return effect;
+            }
+        }
+        return null;
+    }
+
+    private static void ensureEconomy() {
+        if (ECO != null) return;
+        RegisteredServiceProvider<Economy> rsp = Bukkit.getServicesManager().getRegistration(Economy.class);
+        if (rsp != null) ECO = rsp.getProvider();
+    }
+
+    private static List<FoundShopItemModel> filterByBalances(List<FoundShopItemModel> items, Map<UUID, Double> balances) {
+        List<FoundShopItemModel> out = new ArrayList<>(items.size());
+        for (FoundShopItemModel m : items) {
+            OfflinePlayer owner = resolveOwner(m);
+            if (owner == null) {
+                out.add(m);
+                continue;
+            }
+            UUID id = owner.getUniqueId();
+            Double bal = balances.get(id);
+            if (bal == null) {
+                out.add(m);
+                continue;
+            }
+            if (bal >= safePrice(m)) out.add(m);
+        }
+        return out;
+    }
+
+    private static double safePrice(FoundShopItemModel m) {
+        try {
+            return Math.max(0D, m.getShopPrice());
+        } catch (Throwable t) {
+            return 0D;
+        }
+    }
+
+    private static OfflinePlayer resolveOwner(FoundShopItemModel m) {
+        try {
+            Method uuidM = tryMethod(m.getClass(), "getShopOwnerUuid", "getOwnerUuid", "getOwnerUUID", "getOwnerId", "getShopOwnerId");
+            if (uuidM != null) {
+                Object o = uuidM.invoke(m);
+                if (o instanceof UUID u) return Bukkit.getOfflinePlayer(u);
+                if (o instanceof String s) return Bukkit.getOfflinePlayer(UUID.fromString(s));
+            }
+        } catch (Throwable ignored) {
+        }
+        try {
+            Method playerM = tryMethod(m.getClass(), "getShopOwner", "getOwner", "getPlayer", "getShopPlayer");
+            if (playerM != null) {
+                Object o = playerM.invoke(m);
+                if (o instanceof OfflinePlayer op) return op;
+                if (o instanceof UUID u) return Bukkit.getOfflinePlayer(u);
+                if (o instanceof String s) {
+                    try {
+                        return Bukkit.getOfflinePlayer(UUID.fromString(s));
+                    } catch (Throwable e) {
+                        return Bukkit.getOfflinePlayer(s);
+                    }
+                }
+            }
+        } catch (Throwable ignored) {
+        }
+        try {
+            Method nameM = tryMethod(m.getClass(), "getShopOwnerName", "getOwnerName", "getSellerName");
+            if (nameM != null) {
+                Object o = nameM.invoke(m);
+                if (o instanceof String s) return Bukkit.getOfflinePlayer(s);
+            }
+        } catch (Throwable ignored) {
+        }
+        return null;
+    }
+
+    private static Method tryMethod(Class<?> c, String... names) {
+        for (String n : names) {
+            try {
+                Method m = c.getMethod(n);
+                m.setAccessible(true);
+                return m;
+            } catch (NoSuchMethodException ignored) {
             }
         }
         return null;

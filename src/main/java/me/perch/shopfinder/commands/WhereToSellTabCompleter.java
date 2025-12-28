@@ -323,11 +323,10 @@ public class WhereToSellTabCompleter implements TabCompleter {
         if ("voucher".startsWith(toComplete)) completions.add("voucher");
         if ("key".startsWith(toComplete)) completions.add("key");
         if ("unbreakable".startsWith(toComplete)) completions.add("unbreakable");
-        if ("claimblocks".startsWith(toComplete)) completions.add("claim");
+        if ("claimblocks".startsWith(toComplete)) completions.add("claimblocks");
         if ("playtime".startsWith(toComplete)) completions.add("playtime");
         if ("tags".startsWith(toComplete)) completions.add("tags");
         if ("tag".startsWith(toComplete)) completions.add("tag");
-        if ("*".startsWith(toComplete)) completions.add("*");
         if ("tracker".startsWith(toComplete)) completions.add("tracker");
         if ("art".startsWith(toComplete)) completions.add("art");
         if ("artmap".startsWith(toComplete)) completions.add("artmap");

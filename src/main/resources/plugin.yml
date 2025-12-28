@@ -11,6 +11,7 @@ softdepend:
   - Essentials
   - ProtocolLib
   - PlaceholderAPI
+  - Vault
 
 permissions:
   finditem.use:

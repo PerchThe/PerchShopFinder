@@ -92,6 +92,7 @@ public class WhereToBuyCommand implements CommandExecutor {
         if (a0.equals("artmap")) return "wtb_artmap";
         if (a0.equals("mapart")) return "wtb_mapart";
         if (a0.equals("playtime")) return "wtb_playtime";
+        if (a0.equals("claimblocks")) return "wtb_claimblocks";
         return null;
     }
 
@@ -107,6 +108,8 @@ public class WhereToBuyCommand implements CommandExecutor {
                 return new String[] { "lore:artwork" };
             case "mapart":
                 return new String[] { "lore:copyright" };
+            case "claimblocks":
+                return new String[] { "lore:claims" };
             default:
                 return args;
         }
@@ -158,31 +161,6 @@ public class WhereToBuyCommand implements CommandExecutor {
 
         if (firstArg.equalsIgnoreCase("unbreakable")) {
             cmdExecutor.handleShopSearchForUnbreakable(buyCommand, sender);
-            return true;
-        }
-
-        if (firstArg.equals("*")) {
-            Bukkit.getScheduler().runTaskAsynchronously(JavaPlugin.getProvidingPlugin(getClass()), () -> {
-                boolean isBuying = buyCommand.equalsIgnoreCase("TO_BUY") ||
-                        buyCommand.equalsIgnoreCase(FindItemAddOn.getConfigProvider().FIND_ITEM_TO_BUY_AUTOCOMPLETE);
-
-                List<FoundShopItemModel> allItems = (List<FoundShopItemModel>) FindItemAddOn.getQsApiInstance()
-                        .fetchAllItemsFromAllShops(isBuying, player);
-
-                Bukkit.getScheduler().runTask(JavaPlugin.getProvidingPlugin(getClass()), () -> {
-                    if (allItems.isEmpty()) {
-                        player.sendMessage(ColorTranslator.translateColorCodes("&cNo items found for sale."));
-                        player.performCommand("wtbmenu");
-                    } else {
-                        allItems.sort(Comparator.comparing(m -> m.getItem().getType().name()));
-                        if (isBuying) {
-                            cmdExecutor.openShopMenu(player, allItems, false, FindItemAddOn.getConfigProvider().NO_SHOP_FOUND_MSG, "wtbmenu", true);
-                        } else {
-                            cmdExecutor.openShopMenuDescending(player, allItems, false, FindItemAddOn.getConfigProvider().NO_SHOP_FOUND_MSG, "wtsmenu");
-                        }
-                    }
-                });
-            });
             return true;
         }
 
@@ -316,7 +294,7 @@ public class WhereToBuyCommand implements CommandExecutor {
                     result.anyValid = true;
 
                     List<Material> bannerVariants = Arrays.stream(Material.values())
-                            .filter(Material::isItem) // avoid block-only materials
+                            .filter(Material::isItem)
                             .filter(m -> {
                                 String n = m.name();
                                 return n.endsWith("_BANNER") && !n.endsWith("_WALL_BANNER");
@@ -331,7 +309,6 @@ public class WhereToBuyCommand implements CommandExecutor {
                     }
                     continue;
                 }
-
 
                 Material mat = Material.getMaterial(singleItem.toUpperCase());
                 if (mat != null && mat.isItem()) {
