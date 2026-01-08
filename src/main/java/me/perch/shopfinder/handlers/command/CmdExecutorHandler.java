@@ -1,30 +1,34 @@
 package me.perch.shopfinder.handlers.command;
 
-import me.perch.shopfinder.config.ConfigSetup;
+import com.olziedev.playerwarps.api.warp.Warp;
+import me.kodysimpson.simpapi.colors.ColorTranslator;
 import me.perch.shopfinder.FindItemAddOn;
+import me.perch.shopfinder.config.ConfigSetup;
 import me.perch.shopfinder.dependencies.EssentialsXPlugin;
 import me.perch.shopfinder.dependencies.PlayerWarpsPlugin;
+import me.perch.shopfinder.dependencies.WGPlugin;
+import me.perch.shopfinder.handlers.gui.PlayerMenuUtility;
 import me.perch.shopfinder.handlers.gui.menus.FoundShopsMenu;
 import me.perch.shopfinder.models.FoundShopItemModel;
 import me.perch.shopfinder.utils.enums.PlayerPermsEnum;
 import me.perch.shopfinder.utils.json.HiddenShopStorageUtil;
 import me.perch.shopfinder.utils.log.Logger;
-import me.perch.shopfinder.utils.warp.WarpUtils;
-import me.kodysimpson.simpapi.colors.ColorTranslator;
 import me.perch.shopfinder.utils.warp.EssentialWarpsUtil;
 import me.perch.shopfinder.utils.warp.PlayerWarpsUtil;
+import me.perch.shopfinder.utils.warp.WGRegionUtils;
+import me.perch.shopfinder.utils.warp.WarpUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.bukkit.Bukkit;
+import org.bukkit.Location;
 import org.bukkit.Material;
 import org.bukkit.block.Block;
 import org.bukkit.command.CommandSender;
+import org.bukkit.enchantments.Enchantment;
 import org.bukkit.entity.Player;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.meta.EnchantmentStorageMeta;
 import org.bukkit.inventory.meta.PotionMeta;
-import org.bukkit.enchantments.Enchantment;
 import org.bukkit.potion.PotionEffectType;
-import me.perch.shopfinder.handlers.gui.PlayerMenuUtility;
 
 import java.util.*;
 import java.util.stream.Collectors;
@@ -70,10 +74,49 @@ public class CmdExecutorHandler {
         });
     }
 
-    /**
-     * Sorts a list of FoundShopItemModel alphabetically by the item's display name (case-insensitive).
-     * Items without a display name are sorted as empty string ("").
-     */
+    private static List<FoundShopItemModel> filterRequireNearbyWarp(List<FoundShopItemModel> shops, Player player) {
+        if (shops == null || shops.isEmpty()) return shops;
+
+        int mode = FindItemAddOn.getConfigProvider().NEAREST_WARP_MODE;
+
+        boolean canEvaluate =
+                (mode == 1 && EssentialsXPlugin.isEnabled()) ||
+                        (mode == 2 && PlayerWarpsPlugin.getIsEnabled()) ||
+                        (mode == 3 && WGPlugin.isEnabled());
+
+        if (!canEvaluate) return shops;
+
+        List<FoundShopItemModel> out = new ArrayList<>(shops.size());
+        for (FoundShopItemModel s : shops) {
+            if (s == null) continue;
+            if (hasNearbyWarpOrRegion(s, player, mode)) out.add(s);
+        }
+        return out;
+    }
+
+    private static boolean hasNearbyWarpOrRegion(FoundShopItemModel shop, Player player, int mode) {
+        Location loc = shop.getShopLocation();
+        if (loc == null) return false;
+
+        switch (mode) {
+            case 1 -> {
+                String w = EssentialWarpsUtil.findNearestWarp(loc);
+                return w != null && !StringUtils.isEmpty(w);
+            }
+            case 2 -> {
+                Warp w = PlayerWarpsUtil.findNearestWarp(loc, player, shop.getShopOwner());
+                return w != null && !StringUtils.isEmpty(w.getWarpName());
+            }
+            case 3 -> {
+                String r = new WGRegionUtils().findNearestWGRegion(loc);
+                return r != null && !StringUtils.isEmpty(r);
+            }
+            default -> {
+                return false;
+            }
+        }
+    }
+
     public static void sortByDisplayName(List<FoundShopItemModel> list) {
         list.sort(Comparator.comparing(shopItem -> {
             ItemStack item = shopItem.getItemStack();
@@ -99,17 +142,16 @@ public class CmdExecutorHandler {
         }
 
         boolean isBuying;
-        if(StringUtils.isEmpty(FindItemAddOn.getConfigProvider().FIND_ITEM_TO_BUY_AUTOCOMPLETE) || StringUtils.containsIgnoreCase(FindItemAddOn.getConfigProvider().FIND_ITEM_TO_BUY_AUTOCOMPLETE, " ")) {
+        if (StringUtils.isEmpty(FindItemAddOn.getConfigProvider().FIND_ITEM_TO_BUY_AUTOCOMPLETE) || StringUtils.containsIgnoreCase(FindItemAddOn.getConfigProvider().FIND_ITEM_TO_BUY_AUTOCOMPLETE, " ")) {
             isBuying = buySellSubCommand.equalsIgnoreCase("to_buy");
-        }
-        else {
+        } else {
             isBuying = buySellSubCommand.equalsIgnoreCase(FindItemAddOn.getConfigProvider().FIND_ITEM_TO_BUY_AUTOCOMPLETE);
         }
 
         String originCommand = isBuying ? "wtbmenu" : "wtsmenu";
 
-        if(itemArg.equalsIgnoreCase("*") && !FindItemAddOn.getConfigProvider().FIND_ITEM_CMD_DISABLE_SEARCH_ALL_SHOPS) {
-            if(!FindItemAddOn.isQSReremakeInstalled() && FindItemAddOn.getQsApiInstance().isQSShopCacheImplemented()) {
+        if (itemArg.equalsIgnoreCase("*") && !FindItemAddOn.getConfigProvider().FIND_ITEM_CMD_DISABLE_SEARCH_ALL_SHOPS) {
+            if (!FindItemAddOn.isQSReremakeInstalled() && FindItemAddOn.getQsApiInstance().isQSShopCacheImplemented()) {
                 Logger.logDebugInfo("Should run in async thread...");
                 Bukkit.getScheduler().runTaskAsynchronously(FindItemAddOn.getInstance(), () -> {
                     List<FoundShopItemModel> searchResultList = FindItemAddOn.getQsApiInstance().fetchAllItemsFromAllShops(isBuying, player);
@@ -147,13 +189,13 @@ public class CmdExecutorHandler {
             }
         } else {
             Material mat = Material.getMaterial(itemArg.toUpperCase());
-            if(this.checkMaterialBlacklist(mat)) {
+            if (this.checkMaterialBlacklist(mat)) {
                 player.sendMessage(ColorTranslator.translateColorCodes(FindItemAddOn.getConfigProvider().PLUGIN_PREFIX + "&cThis material is not allowed."));
                 return;
             }
             if (mat != null && mat.isItem()) {
                 Logger.logDebugInfo("Material found: " + mat);
-                if(!FindItemAddOn.isQSReremakeInstalled() && FindItemAddOn.getQsApiInstance().isQSShopCacheImplemented()) {
+                if (!FindItemAddOn.isQSReremakeInstalled() && FindItemAddOn.getQsApiInstance().isQSShopCacheImplemented()) {
                     Bukkit.getScheduler().runTaskAsynchronously(FindItemAddOn.getInstance(), () -> {
                         List<FoundShopItemModel> searchResultList = FindItemAddOn.getQsApiInstance().findItemBasedOnTypeFromAllShops(new ItemStack(mat), isBuying, player);
                         sortShopsByNearbyWarp(searchResultList, player);
@@ -190,7 +232,7 @@ public class CmdExecutorHandler {
                 }
             } else {
                 Logger.logDebugInfo("Material not found! Performing query based search..");
-                if(!FindItemAddOn.isQSReremakeInstalled() && FindItemAddOn.getQsApiInstance().isQSShopCacheImplemented()) {
+                if (!FindItemAddOn.isQSReremakeInstalled() && FindItemAddOn.getQsApiInstance().isQSShopCacheImplemented()) {
                     Bukkit.getScheduler().runTaskAsynchronously(FindItemAddOn.getInstance(), () -> {
                         List<FoundShopItemModel> searchResultList = FindItemAddOn.getQsApiInstance().findItemBasedOnDisplayNameFromAllShops(itemArg, isBuying, player);
                         sortShopsByNearbyWarp(searchResultList, player);
@@ -442,10 +484,11 @@ public class CmdExecutorHandler {
     }
 
     public void openShopMenu(Player player, List<FoundShopItemModel> searchResultList, boolean synchronize, String errorMsg, String originCommand, boolean isBuying) {
+        searchResultList = filterRequireNearbyWarp(searchResultList, player);
+
         if (!searchResultList.isEmpty()) {
             List<FoundShopItemModel> finalList;
 
-            // Special case: /wtb tags or /wtb tag
             if ("wtb_tags".equalsIgnoreCase(originCommand)) {
                 sortByDisplayName(searchResultList);
                 finalList = new ArrayList<>(searchResultList);
@@ -461,23 +504,20 @@ public class CmdExecutorHandler {
                 finalList = new ArrayList<>();
 
                 if (isBuying) {
-                    // Shuffle the groups (item types)
                     List<Material> types = new ArrayList<>(grouped.keySet());
                     Collections.shuffle(types);
 
                     for (Material type : types) {
                         List<FoundShopItemModel> shops = grouped.get(type);
-                        Collections.shuffle(shops); // Shuffle within group
+                        Collections.shuffle(shops);
                         finalList.addAll(shops);
                     }
                 } else {
-                    // Sort the groups (item types)
                     List<Material> types = new ArrayList<>(grouped.keySet());
-                    types.sort(Comparator.comparing(Enum::name)); // Alphabetical by type
+                    types.sort(Comparator.comparing(Enum::name));
 
                     for (Material type : types) {
                         List<FoundShopItemModel> shops = grouped.get(type);
-                        // Sort within group, e.g. by price ascending
                         shops.sort(Comparator.comparingDouble(FoundShopItemModel::getShopPrice));
                         finalList.addAll(shops);
                     }
@@ -505,6 +545,8 @@ public class CmdExecutorHandler {
     }
 
     public void openShopMenuDescending(Player player, List<FoundShopItemModel> searchResultList, boolean synchronize, String errorMsg, String originCommand) {
+        searchResultList = filterRequireNearbyWarp(searchResultList, player);
+
         if (!searchResultList.isEmpty()) {
             searchResultList.sort(
                     Comparator.comparing((FoundShopItemModel shop) -> getPotionEffectSortKey(shop.getItemStack()))
@@ -647,58 +689,51 @@ public class CmdExecutorHandler {
             Bukkit.getPluginManager().enablePlugin(FindItemAddOn.getPlugin(FindItemAddOn.class));
             Logger.logInfo("&aPlugin restarted!");
             List allServerShops = FindItemAddOn.getQsApiInstance().getAllShops();
-            if(allServerShops.size() == 0) {
+            if (allServerShops.size() == 0) {
                 Logger.logWarning("&6Found &e0 &6shops on the server. If you ran &e/qs reload &6recently, please restart your server!");
-            }
-            else {
+            } else {
                 Logger.logInfo("&aFound &e" + allServerShops.size() + " &ashops on the server.");
             }
-        }
-        else {
+        } else {
             Player player = (Player) commandSender;
-            if(player.hasPermission(PlayerPermsEnum.FINDITEM_RESTART.value()) || player.hasPermission(PlayerPermsEnum.FINDITEM_ADMIN.value())) {
+            if (player.hasPermission(PlayerPermsEnum.FINDITEM_RESTART.value()) || player.hasPermission(PlayerPermsEnum.FINDITEM_ADMIN.value())) {
                 Bukkit.getPluginManager().disablePlugin(FindItemAddOn.getInstance());
                 Bukkit.getPluginManager().enablePlugin(FindItemAddOn.getPlugin(FindItemAddOn.class));
                 player.sendMessage(ColorTranslator.translateColorCodes(FindItemAddOn.getConfigProvider().PLUGIN_PREFIX + "&aPlugin restarted!"));
                 List allServerShops = FindItemAddOn.getQsApiInstance().getAllShops();
-                if(allServerShops.size() == 0) {
+                if (allServerShops.size() == 0) {
                     player.sendMessage(ColorTranslator.translateColorCodes(
                             FindItemAddOn.getConfigProvider().PLUGIN_PREFIX
                                     + "&6Found &e0 &6shops on the server. If you ran &e/qs reload &6recently, please restart your server!"));
-                }
-                else {
+                } else {
                     player.sendMessage(ColorTranslator.translateColorCodes(
                             FindItemAddOn.getConfigProvider().PLUGIN_PREFIX + "&aFound &e" + allServerShops.size() + " &ashops on the server."));
                 }
-            }
-            else {
+            } else {
                 player.sendMessage(ColorTranslator.translateColorCodes(FindItemAddOn.getConfigProvider().PLUGIN_PREFIX + "&cNo permission!"));
             }
         }
     }
 
     private void hideHikariShop(com.ghostchu.quickshop.api.shop.Shop shop, Player player) {
-        if(shop != null) {
-            if(FindItemAddOn.getQsApiInstance().isShopOwnerCommandRunner(player, shop)) {
-                if(!HiddenShopStorageUtil.isShopHidden(shop)) {
+        if (shop != null) {
+            if (FindItemAddOn.getQsApiInstance().isShopOwnerCommandRunner(player, shop)) {
+                if (!HiddenShopStorageUtil.isShopHidden(shop)) {
                     HiddenShopStorageUtil.handleShopSearchVisibilityAsync(shop, true);
                     player.sendMessage(ColorTranslator.translateColorCodes(
                             FindItemAddOn.getConfigProvider().PLUGIN_PREFIX
                                     + FindItemAddOn.getConfigProvider().FIND_ITEM_CMD_SHOP_HIDE_SUCCESS_MSG));
-                }
-                else {
+                } else {
                     player.sendMessage(ColorTranslator.translateColorCodes(
                             FindItemAddOn.getConfigProvider().PLUGIN_PREFIX
                                     + FindItemAddOn.getConfigProvider().FIND_ITEM_CMD_SHOP_ALREADY_HIDDEN_MSG));
                 }
-            }
-            else {
+            } else {
                 player.sendMessage(ColorTranslator.translateColorCodes(
                         FindItemAddOn.getConfigProvider().PLUGIN_PREFIX
                                 + FindItemAddOn.getConfigProvider().FIND_ITEM_CMD_HIDING_SHOP_OWNER_INVALID_MSG));
             }
-        }
-        else {
+        } else {
             player.sendMessage(ColorTranslator.translateColorCodes(
                     FindItemAddOn.getConfigProvider().PLUGIN_PREFIX
                             + FindItemAddOn.getConfigProvider().FIND_ITEM_CMD_INVALID_SHOP_BLOCK_MSG));
@@ -706,27 +741,24 @@ public class CmdExecutorHandler {
     }
 
     private void revealShop(com.ghostchu.quickshop.api.shop.Shop shop, Player player) {
-        if(shop != null) {
-            if(FindItemAddOn.getQsApiInstance().isShopOwnerCommandRunner(player, shop)) {
-                if(HiddenShopStorageUtil.isShopHidden(shop)) {
+        if (shop != null) {
+            if (FindItemAddOn.getQsApiInstance().isShopOwnerCommandRunner(player, shop)) {
+                if (HiddenShopStorageUtil.isShopHidden(shop)) {
                     HiddenShopStorageUtil.handleShopSearchVisibilityAsync(shop, false);
                     player.sendMessage(ColorTranslator.translateColorCodes(
                             FindItemAddOn.getConfigProvider().PLUGIN_PREFIX
                                     + FindItemAddOn.getConfigProvider().FIND_ITEM_CMD_SHOP_REVEAL_SUCCESS_MSG));
-                }
-                else {
+                } else {
                     player.sendMessage(ColorTranslator.translateColorCodes(
                             FindItemAddOn.getConfigProvider().PLUGIN_PREFIX
                                     + FindItemAddOn.getConfigProvider().FIND_ITEM_CMD_SHOP_ALREADY_PUBLIC_MSG));
                 }
-            }
-            else {
+            } else {
                 player.sendMessage(ColorTranslator.translateColorCodes(
                         FindItemAddOn.getConfigProvider().PLUGIN_PREFIX
                                 + FindItemAddOn.getConfigProvider().FIND_ITEM_CMD_HIDING_SHOP_OWNER_INVALID_MSG));
             }
-        }
-        else {
+        } else {
             player.sendMessage(ColorTranslator.translateColorCodes(
                     FindItemAddOn.getConfigProvider().PLUGIN_PREFIX
                             + FindItemAddOn.getConfigProvider().FIND_ITEM_CMD_INVALID_SHOP_BLOCK_MSG));
