@@ -64,9 +64,19 @@ public class WhereToBuyCommand implements CommandExecutor {
         map.put("INFESTATION", PotionEffectType.getByName("INFESTED"));
         map.put("WEAVING", PotionEffectType.getByName("WEAVING"));
         map.put("WINDCHARGING", PotionEffectType.getByName("WIND_CHARGED"));
-        map.put("TURTLEMASTER", PotionEffectType.getByName("DAMAGE_RESISTANCE"));
         map.put("NAUSEA", PotionEffectType.getByName("CONFUSION"));
         map.put("CONFUSION", PotionEffectType.getByName("CONFUSION"));
+
+        // Missing Aliases Fixed Below:
+        map.put("HARMING", PotionEffectType.getByName("HARM"));
+        map.put("LEAPING", PotionEffectType.getByName("JUMP"));
+        map.put("REGEN", PotionEffectType.getByName("REGENERATION"));
+        map.put("HEALING", PotionEffectType.getByName("HEAL"));
+        map.put("DECAY", PotionEffectType.getByName("WITHER"));
+        map.put("DULLNESS", PotionEffectType.getByName("SLOW_DIGGING"));
+
+        // Notice: TURTLEMASTER was removed from here to be handled explicitly!
+
         return map;
     }
 
@@ -179,6 +189,37 @@ public class WhereToBuyCommand implements CommandExecutor {
                 singleItem = singleItem.trim();
                 if (singleItem.isEmpty()) continue;
 
+                if (singleItem.equalsIgnoreCase("mob_egg")) {
+                    result.anyValid = true;
+                    Material brownEgg = Material.getMaterial("BROWN_EGG");
+                    if (brownEgg != null) {
+                        List<FoundShopItemModel> eggItems = (List<FoundShopItemModel>) FindItemAddOn.getQsApiInstance()
+                                .findItemBasedOnTypeFromAllShops(new ItemStack(brownEgg), isBuying, player);
+
+                        List<FoundShopItemModel> caughtMobs = eggItems.stream()
+                                .filter(shopItem -> {
+                                    ItemStack item = shopItem.getItemStack();
+                                    if (item == null || !item.hasItemMeta()) return false;
+
+                                    if (item.getItemMeta().hasLore()) {
+                                        List<String> lore = item.getItemMeta().getLore();
+                                        if (lore != null) {
+                                            for (String line : lore) {
+                                                String lowerLine = line.toLowerCase(Locale.ROOT);
+                                                if (lowerLine.contains("contains") || lowerLine.contains("catch")) {
+                                                    return true;
+                                                }
+                                            }
+                                        }
+                                    }
+                                    return false;
+                                })
+                                .collect(Collectors.toList());
+                        result.allResults.addAll(caughtMobs);
+                    }
+                    continue;
+                }
+
                 if (singleItem.toLowerCase().startsWith("lore:")) {
                     result.anyValid = true;
                     String loreSearch = singleItem.substring(5).toLowerCase();
@@ -225,7 +266,9 @@ public class WhereToBuyCommand implements CommandExecutor {
                 }
 
                 PotionEffectType effect = getPotionEffectByName(singleItem);
-                if (effect != null) {
+                boolean isTurtleMaster = singleItem.equalsIgnoreCase("TURTLEMASTER");
+
+                if (effect != null || isTurtleMaster) {
                     result.anyValid = true;
                     List<Material> potionMaterials = Arrays.asList(
                             Material.POTION,
@@ -240,13 +283,34 @@ public class WhereToBuyCommand implements CommandExecutor {
                                 .filter(shopItem -> {
                                     ItemStack item = shopItem.getItemStack();
                                     if (item != null && item.hasItemMeta() && item.getItemMeta() instanceof PotionMeta meta) {
+                                        boolean matchesBase = false;
                                         try {
                                             var data = meta.getBasePotionData();
-                                            if (data != null && data.getType() != null && data.getType().getEffectType() == effect) {
-                                                return true;
+                                            if (data != null && data.getType() != null) {
+                                                if (isTurtleMaster) {
+                                                    if (data.getType().name().equals("TURTLE_MASTER")) {
+                                                        matchesBase = true;
+                                                    }
+                                                } else {
+                                                    // Standard Effect Search
+                                                    if (effect != null && data.getType().getEffectType() == effect) {
+                                                        // Prevent 'Slowness' search from showing Turtle Master potions
+                                                        if (data.getType().name().equals("TURTLE_MASTER")) {
+                                                            matchesBase = false;
+                                                        } else {
+                                                            matchesBase = true;
+                                                        }
+                                                    }
+                                                }
                                             }
                                         } catch (Throwable ignored) {}
-                                        return meta.hasCustomEffects() && meta.getCustomEffects().stream().anyMatch(e -> e.getType().equals(effect));
+
+                                        if (matchesBase) return true;
+
+                                        // Fallback for custom effects on the potion
+                                        if (effect != null) {
+                                            return meta.hasCustomEffects() && meta.getCustomEffects().stream().anyMatch(e -> e.getType().equals(effect));
+                                        }
                                     }
                                     return false;
                                 })
@@ -310,7 +374,12 @@ public class WhereToBuyCommand implements CommandExecutor {
                     continue;
                 }
 
-                Material mat = Material.getMaterial(singleItem.toUpperCase());
+                String potentialMatName = singleItem.toUpperCase();
+                if (potentialMatName.equals("BOOK_AND_QUILL") || potentialMatName.equals("BOOKANDQUILL")) {
+                    potentialMatName = "WRITABLE_BOOK";
+                }
+
+                Material mat = Material.getMaterial(potentialMatName);
                 if (mat != null && mat.isItem()) {
                     result.anyValid = true;
                     List<FoundShopItemModel> foundItems = (List<FoundShopItemModel>) FindItemAddOn.getQsApiInstance()

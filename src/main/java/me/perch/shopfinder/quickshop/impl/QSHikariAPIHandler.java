@@ -1,6 +1,5 @@
 package me.perch.shopfinder.quickshop.impl;
 
-import cc.carm.lib.easysql.api.SQLQuery;
 import com.ghostchu.quickshop.QuickShop;
 import com.ghostchu.quickshop.QuickShopBukkit;
 import com.ghostchu.quickshop.api.QuickShopAPI;
@@ -59,13 +58,41 @@ public class QSHikariAPIHandler implements QSApi<QuickShop, Shop> {
         isQSHikariShopCacheImplemented = checkIfQSHikariShopCacheImplemented();
     }
 
+    /**
+     * UNIVERSAL LOCATION HELPER
+     * This uses Reflection to find either getPosition() (New) or getLocation() (Old).
+     * This bypasses compile-time errors completely.
+     */
+    private Location getShopLocationSafe(Shop shop) {
+        if (shop == null) return null;
+        try {
+            // Try new Hikari 6.0+ method first
+            Method getPos = shop.getClass().getMethod("getPosition");
+            return (Location) getPos.invoke(shop);
+        } catch (NoSuchMethodException e) {
+            // Fallback to old method if using older jar or dependency conflict
+            try {
+                Method getLoc = shop.getClass().getMethod("getLocation");
+                return (Location) getLoc.invoke(shop);
+            } catch (Exception ex) {
+                return null;
+            }
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
     public List<FoundShopItemModel> findItemBasedOnTypeFromAllShops(ItemStack item, boolean toBuy, Player searchingPlayer) {
         var begin = Instant.now();
         List<FoundShopItemModel> shopsFoundList = new ArrayList<>();
         List<Shop> allShops = fetchAllShopsFromQS();
         for (Shop shopIterator : allShops) {
+            // USE SAFE LOCATION GETTER
+            Location loc = getShopLocationSafe(shopIterator);
+            if (loc == null || loc.getWorld() == null) continue;
+
             if (shopIterator.playerAuthorize(searchingPlayer.getUniqueId(), BuiltInShopPermission.SEARCH)
-                    && (!FindItemAddOn.getConfigProvider().getBlacklistedWorlds().contains(shopIterator.getLocation().getWorld())
+                    && (!FindItemAddOn.getConfigProvider().getBlacklistedWorlds().contains(loc.getWorld())
                     && shopIterator.getItem().getType().equals(item.getType())
                     && (toBuy ? shopIterator.isSelling() : shopIterator.isBuying()))
                     && (!HiddenShopStorageUtil.isShopHidden(shopIterator))) {
@@ -90,7 +117,20 @@ public class QSHikariAPIHandler implements QSApi<QuickShop, Shop> {
             return true;
         }
 
-        Location shopLoc = shop.getLocation();
+        // We can't use the static helper here easily without an instance,
+        // but since we are inside the handler, we can just duplicate the safe logic or cast.
+        // For static context, let's use a quick reflection block.
+        Location shopLoc = null;
+        try {
+            Method m = shop.getClass().getMethod("getPosition");
+            shopLoc = (Location) m.invoke(shop);
+        } catch (Exception e) {
+            try {
+                Method m = shop.getClass().getMethod("getLocation");
+                shopLoc = (Location) m.invoke(shop);
+            } catch (Exception ignored) {}
+        }
+
         if (shopLoc == null) {
             return true;
         }
@@ -106,6 +146,7 @@ public class QSHikariAPIHandler implements QSApi<QuickShop, Shop> {
 
         QuickShop quickShop = getQuickShop();
 
+        // 1. Try new Economy Manager (Hikari)
         try {
             Method getEconomyManager = quickShop.getClass().getMethod("getEconomyManager");
             Object economyManager = getEconomyManager.invoke(quickShop);
@@ -145,25 +186,7 @@ public class QSHikariAPIHandler implements QSApi<QuickShop, Shop> {
         } catch (Throwable ignored) {
         }
 
-        try {
-            Object economy = quickShop.getEconomy();
-            if (economy == null) {
-                return true;
-            }
-            Method legacyBalance = economy.getClass().getMethod(
-                    "getBalance",
-                    QUser.class,
-                    World.class,
-                    currency.getClass()
-            );
-            Object res = legacyBalance.invoke(economy, qUser, world, currency);
-            if (res instanceof Number n) {
-                return n.doubleValue() >= pricePerTransaction;
-            }
-            return true;
-        } catch (Throwable ignored) {
-            return true;
-        }
+        return true;
     }
 
     private static QuickShop getQuickShop() {
@@ -190,8 +213,12 @@ public class QSHikariAPIHandler implements QSApi<QuickShop, Shop> {
         List<FoundShopItemModel> shopsFoundList = new ArrayList<>();
         List<Shop> allShops = fetchAllShopsFromQS();
         for (Shop shopIterator : allShops) {
+            // USE SAFE LOCATION GETTER
+            Location loc = getShopLocationSafe(shopIterator);
+            if (loc == null) continue;
+
             if (shopIterator.playerAuthorize(searchingPlayer.getUniqueId(), BuiltInShopPermission.SEARCH)
-                    && !FindItemAddOn.getConfigProvider().getBlacklistedWorlds().contains(shopIterator.getLocation().getWorld())
+                    && !FindItemAddOn.getConfigProvider().getBlacklistedWorlds().contains(loc.getWorld())
                     && shopIterator.getItem().hasItemMeta()
                     && Objects.requireNonNull(shopIterator.getItem().getItemMeta()).hasDisplayName()
                     && (shopIterator.getItem().getItemMeta().getDisplayName().toLowerCase().contains(displayName.toLowerCase())
@@ -210,8 +237,12 @@ public class QSHikariAPIHandler implements QSApi<QuickShop, Shop> {
         List<FoundShopItemModel> shopsFoundList = new ArrayList<>();
         List<Shop> allShops = fetchAllShopsFromQS();
         for (Shop shopIterator : allShops) {
+            // USE SAFE LOCATION GETTER
+            Location loc = getShopLocationSafe(shopIterator);
+            if (loc == null) continue;
+
             if (shopIterator.playerAuthorize(searchingPlayer.getUniqueId(), BuiltInShopPermission.SEARCH)
-                    && (!FindItemAddOn.getConfigProvider().getBlacklistedWorlds().contains(shopIterator.getLocation().getWorld())
+                    && (!FindItemAddOn.getConfigProvider().getBlacklistedWorlds().contains(loc.getWorld())
                     && (toBuy ? shopIterator.isSelling() : shopIterator.isBuying()))
                     && (!HiddenShopStorageUtil.isShopHidden(shopIterator))) {
                 processPotentialShopMatchAndAddToFoundList(toBuy, shopIterator, shopsFoundList, searchingPlayer);
@@ -269,7 +300,11 @@ public class QSHikariAPIHandler implements QSApi<QuickShop, Shop> {
         long start = System.currentTimeMillis();
         List<ShopSearchActivityModel> tempGlobalShopsList = new ArrayList<>();
         for (Shop shop_i : getAllShops()) {
-            Location shopLoc = shop_i.getLocation();
+            // USE SAFE LOCATION GETTER
+            Location shopLoc = getShopLocationSafe(shop_i);
+
+            if (shopLoc == null) continue;
+
             tempGlobalShopsList.add(new ShopSearchActivityModel(
                     shopLoc.getWorld().getName(),
                     shopLoc.getX(),
@@ -399,9 +434,8 @@ public class QSHikariAPIHandler implements QSApi<QuickShop, Shop> {
     }
 
     private void testQuickShopHikariExternalCache(Shop shop) throws RuntimeException {
-        boolean fetchRemainingStock = false;
         long shopId = shop.getShopId();
-        try (SQLQuery query = DataTables.EXTERNAL_CACHE.createQuery()
+        try (var query = DataTables.EXTERNAL_CACHE.createQuery()
                 .addCondition("shop", shopId)
                 .selectColumns("space", "stock")
                 .setLimit(1)
@@ -410,7 +444,8 @@ public class QSHikariAPIHandler implements QSApi<QuickShop, Shop> {
             if (resultSet.next()) {
                 long stock = resultSet.getLong("stock");
                 long space = resultSet.getLong("space");
-                Logger.logWarning("1: Location: " + shop.getLocation() + " | Stock: " + stock + " | Space: " + space);
+                // USE SAFE LOCATION GETTER
+                Logger.logWarning("1: Location: " + getShopLocationSafe(shop) + " | Stock: " + stock + " | Space: " + space);
             } else {
                 Logger.logWarning("No cached data found!");
             }
@@ -434,11 +469,15 @@ public class QSHikariAPIHandler implements QSApi<QuickShop, Shop> {
         if (!toBuy && !isOwnerHavingEnoughBalance(shopIterator)) {
             return;
         }
+
+        // USE SAFE LOCATION GETTER
+        Location safeLoc = getShopLocationSafe(shopIterator);
+
         shopsFoundList.add(new FoundShopItemModel(
                 shopIterator.getPrice(),
                 QSApi.processStockOrSpace(stockOrSpace),
                 shopIterator.getOwner().getUniqueIdOptional().orElse(new UUID(0, 0)),
-                shopIterator.getLocation(),
+                safeLoc, // Passed safe location here
                 shopIterator.getItem(),
                 toBuy
         ));

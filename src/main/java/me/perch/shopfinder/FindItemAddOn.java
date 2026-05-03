@@ -119,18 +119,17 @@ public final class FindItemAddOn extends JavaPlugin {
         getCommand("outofstock").setExecutor(new OutOfStockCommand(cmdExecutorHandler));
         initCommands();
 
-        // Additional commands + tab completers
         getCommand("wheretobuy").setExecutor(new WhereToBuyCommand());
-        getCommand("wheretobuy").setTabCompleter(new WhereToBuyTabCompleter());
+        getCommand("wheretobuy").setTabCompleter(new ShopSearchTabCompleter());
         getCommand("highlightcolour").setExecutor(new HighlightColourCommand());
         getCommand("wheretoget").setExecutor(new WhereToGetCommand());
-        getCommand("wheretoget").setTabCompleter(new WhereToBuyTabCompleter());
+        getCommand("wheretoget").setTabCompleter(new ShopSearchTabCompleter());
         getCommand("excludewarp").setExecutor(new ExcludeWarpCommand());
         getCommand("excludewarp").setTabCompleter(new ExcludeWarpCommand());
         getCommand("includewarp").setExecutor(new ExcludeWarpCommand());
         getCommand("includewarp").setTabCompleter(new ExcludeWarpCommand());
         getCommand("wheretosell").setExecutor(new WhereToSellCommand());
-        getCommand("wheretosell").setTabCompleter(new WhereToSellTabCompleter());
+        getCommand("wheretosell").setTabCompleter(new ShopSearchTabCompleter());
 
         // QuickShop presence detection
         if (!Bukkit.getPluginManager().isPluginEnabled("QuickShop")

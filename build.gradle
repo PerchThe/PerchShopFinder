@@ -27,6 +27,11 @@ dependencies {
     compileOnly "me.clip:placeholderapi:2.11.6"
     implementation "io.papermc:paperlib:1.0.7"
     compileOnly "com.github.dmulloy2:ProtocolLib:5.2.0"
+
+    // --- CONFLICT FIX START ---
+    // We comment this out to force usage of the local library file below.
+    // This Maven version is older/incomplete and lacks the .getPosition() method.
+    /*
     compileOnly("com.ghostchu:quickshop-api:6.2.0.9-RELEASE-1") {
         exclude group: 'org.jetbrains', module: 'annotations'
         exclude group: 'net.kyori', module: 'adventure-platform-bukkit'
@@ -36,6 +41,9 @@ dependencies {
         exclude group: 'me.xanium', module: 'GemsEconomy'
         exclude group: 'com.ghostchu', module: 'quickshop-common'
     }
+    */
+    // --- CONFLICT FIX END ---
+
     compileOnly "net.essentialsx:EssentialsX:2.21.0"
     compileOnly "com.olziedev:playerwarps-api:7.7.1"
     compileOnly("com.sk89q.worldguard:worldguard-bukkit:7.0.7") {
@@ -58,7 +66,11 @@ dependencies {
     implementation "org.apache.commons:commons-lang3:3.14.0"
     compileOnly "org.projectlombok:lombok:1.18.34"
     annotationProcessor "org.projectlombok:lombok:1.18.34"
-    compileOnly files('lib/QuickShop-Hikari-6.2.0.9-RELEASE-1.jar')
+
+    // THIS is the file causing the conflict if the API block above is active.
+    // Now that the block above is removed, Gradle will correctly use this file.
+    compileOnly files('lib/QuickShop-Hikari-6.2.0.11-RELEASE-CANDIDATE-2.jar')
+
     implementation "com.github.KodySimpson:SimpAPI:4.6.1"
     compileOnly "net.kyori:adventure-api:4.16.0"
     compileOnly "cc.carm.lib:easysql-api:0.4.7"

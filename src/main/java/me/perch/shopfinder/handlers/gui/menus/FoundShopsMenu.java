@@ -1,6 +1,5 @@
 package me.perch.shopfinder.handlers.gui.menus;
 
-import com.olziedev.playerwarps.api.warp.Warp;
 import me.perch.shopfinder.config.ConfigProvider;
 import me.perch.shopfinder.dependencies.EssentialsXPlugin;
 import me.perch.shopfinder.dependencies.PlayerWarpsPlugin;
@@ -18,6 +17,7 @@ import me.perch.shopfinder.utils.log.Logger;
 import me.perch.shopfinder.utils.warp.EssentialWarpsUtil;
 import me.perch.shopfinder.utils.warp.PlayerWarpsUtil;
 import me.perch.shopfinder.utils.warp.WGRegionUtils;
+import com.olziedev.playerwarps.api.warp.Warp;
 import org.bukkit.enchantments.Enchantment;
 import org.bukkit.inventory.ItemFlag;
 import io.papermc.lib.PaperLib;
@@ -54,19 +54,32 @@ public class FoundShopsMenu extends PaginatedMenu {
     private final List<FoundShopItemModel> currentPageShops = new ArrayList<>();
     private final boolean isBuying;
 
-    // -- Optimization: Caches for Instant Loading --
+    // -- Optimization: Caches --
     private static final Map<UUID, String> ownerNameCache = new ConcurrentHashMap<>();
-    private static final Map<FoundShopItemModel, CachedShopData> menuDataCache = new ConcurrentHashMap<>();
 
-    // Flag to prevent sorting loops
+    // Instance-based cache for per-player favorites.
+    // Stores: <ShopItem, Data>
+    private final Map<FoundShopItemModel, CachedShopData> menuDataCache = new ConcurrentHashMap<>();
+
     private boolean hasBeenSorted = false;
     private BukkitTask loadingTask;
+    private int currentRenderId = 0;
 
     public FoundShopsMenu(PlayerMenuUtility playerMenuUtility, List<FoundShopItemModel> searchResult, boolean isBuying) {
         super(playerMenuUtility, searchResult);
         configProvider = FindItemAddOn.getConfigProvider();
         this.isBuying = isBuying;
-        // Do NOT sort here. We want instant open, then async sort.
+
+        List<FoundShopItemModel> list = super.playerMenuUtility.getPlayerShopSearchResult();
+        if (list != null && !list.isEmpty()) {
+            // 1. Always shuffle first to ensure ties are completely randomized
+            Collections.shuffle(list);
+
+            // 2. ONLY if this is the /wts menu (selling), sort by price descending
+            if (!isBuying) {
+                list.sort((s1, s2) -> Double.compare(s2.getShopPrice(), s1.getShopPrice()));
+            }
+        }
     }
 
     public FoundShopsMenu(PlayerMenuUtility playerMenuUtility, List<FoundShopItemModel> searchResult) {
@@ -115,26 +128,32 @@ public class FoundShopsMenu extends PaginatedMenu {
             if (shopIndex >= 0 && shopIndex < currentPageShops.size()) {
                 FoundShopItemModel foundShop = currentPageShops.get(shopIndex);
 
+                // --- SHIFT CLICK: TOGGLE FAVORITE ---
                 if (event.getClick() == org.bukkit.event.inventory.ClickType.SHIFT_RIGHT
                         || event.getClick() == org.bukkit.event.inventory.ClickType.SHIFT_LEFT) {
 
-                    // Use cached warp if available to be snappy
-                    String nearestWarp = null;
                     CachedShopData cached = menuDataCache.get(foundShop);
-                    if (cached != null) nearestWarp = cached.nearestWarp();
-
-                    if (nearestWarp == null) nearestWarp = getNearestWarpInfo(foundShop);
+                    String nearestWarp = (cached != null) ? cached.nearestWarp : getNearestWarpInfo(foundShop);
 
                     if (nearestWarp != null && !nearestWarp.isEmpty()
                             && !nearestWarp.equals(configProvider.NO_WARP_NEAR_SHOP_ERROR_MSG)) {
+
+                        // 1. Run the command to update backend
                         player.performCommand("w favorite " + nearestWarp);
 
-                        // Force refresh to update star icon
-                        // We invalidate the cache for this specific item so it re-checks the fav status
-                        menuDataCache.remove(foundShop);
+                        // 2. OPTIMISTIC UPDATE:
+                        boolean currentStatus = (cached != null) && cached.isFav;
+                        boolean newStatus = !currentStatus;
 
-                        // Re-run sort logic to move it to top/bottom
+                        String ownerName = (cached != null) ? cached.ownerName : resolveOwnerName(foundShop.getShopOwner());
+
+                        // IMPORTANT: Set timestamp to NOW to prevent double-checks
+                        menuDataCache.put(foundShop, new CachedShopData(nearestWarp, newStatus, ownerName, System.currentTimeMillis()));
+
+                        // 3. Mark as NOT sorted so the next render triggers a re-sort
                         hasBeenSorted = false;
+
+                        // 4. Re-open immediately.
                         super.open(super.playerMenuUtility.getPlayerShopSearchResult());
                     } else {
                         super.open(super.playerMenuUtility.getPlayerShopSearchResult());
@@ -230,15 +249,7 @@ public class FoundShopsMenu extends PaginatedMenu {
         }
     }
 
-    // -- OPTIMIZATION: Expanded Record to hold expensive data --
-    private record CachedShopData(
-            String nearestWarp,
-            boolean isFav,
-            String ownerName,
-            double avgRating,     // Cached to prevent lag during render
-            int totalRatings,     // Cached to prevent lag during render
-            int visitCount        // Cached to prevent lag during render
-    ) {}
+    private record CachedShopData(String nearestWarp, boolean isFav, String ownerName, long timestamp) {}
 
     @Override
     public void setMenuItems(List<FoundShopItemModel> foundShops) {
@@ -246,22 +257,23 @@ public class FoundShopsMenu extends PaginatedMenu {
             loadingTask.cancel();
         }
 
-        // Setup UI Frame
+        currentRenderId++;
+        final int taskRenderId = currentRenderId;
+
         ItemStack filler = new ItemStack(Material.ORANGE_STAINED_GLASS_PANE);
         ItemMeta meta = filler.getItemMeta();
         if (meta != null) { meta.setDisplayName(" "); filler.setItemMeta(meta); }
         for (int i = 1; i <= 8; i++) { inventory.setItem(i, filler); }
         addMenuBottomBar();
         updateNavButtonLabels(foundShops != null ? foundShops.size() : 0);
-        currentPageShops.clear();
 
         if (foundShops == null || foundShops.isEmpty()) return;
 
-        // --- SORTING LOGIC START ---
+        // Trigger Async Sort
         if (!hasBeenSorted && configProvider.NEAREST_WARP_MODE == 2 && PlayerWarpsPlugin.getIsEnabled()) {
-            scanAndSortAsync(foundShops);
+            List<FoundShopItemModel> copyForSort = new ArrayList<>(foundShops);
+            scanAndSortAsync(copyForSort);
         }
-        // --- SORTING LOGIC END ---
 
         int maxItemsPerPage = MAX_ITEMS_PER_PAGE;
         int startIndex = maxItemsPerPage * page;
@@ -273,96 +285,93 @@ public class FoundShopsMenu extends PaginatedMenu {
             endIndex = Math.min(maxItemsPerPage, foundShops.size());
         }
 
-        List<FoundShopItemModel> subList = foundShops.subList(startIndex, endIndex);
+        List<FoundShopItemModel> pageItemsSafeCopy = new ArrayList<>(foundShops.subList(startIndex, endIndex));
 
-        // 1. Instant Render
-        renderItems(subList, startIndex, true);
-
-        // 2. Load missing display data (Owner names, ratings) for this specific page
-        loadPageDataAsync(subList, startIndex);
+        renderItems(pageItemsSafeCopy, startIndex, true);
+        loadPageDataAsync(pageItemsSafeCopy, startIndex, taskRenderId);
     }
 
-    private void scanAndSortAsync(List<FoundShopItemModel> allShops) {
+    private void scanAndSortAsync(List<FoundShopItemModel> shopsToSort) {
         Player viewer = playerMenuUtility.getOwner();
 
         loadingTask = Bukkit.getScheduler().runTaskAsynchronously(FindItemAddOn.getInstance(), () -> {
-            boolean needsSort = false;
+            boolean cacheUpdated = false;
 
-            for (FoundShopItemModel shop : allShops) {
+            for (FoundShopItemModel shop : shopsToSort) {
                 CachedShopData cached = menuDataCache.get(shop);
 
-                if (cached == null) {
-                    // Resolve Warp Name
-                    String nearestWarpName = getNearestWarpInfo(shop);
-                    boolean isFav = false;
-                    double avgRating = -1;
-                    int totalRatings = 0;
+                boolean needsCheck = (cached == null);
+                if (!needsCheck && cached.timestamp == 0L && !cached.isFav && configProvider.NEAREST_WARP_MODE == 2) {
+                    needsCheck = true;
+                }
 
-                    // Resolve DB Heavy stuff (Ratings & Favs)
+                if (needsCheck) {
+                    String nearestWarpName = (cached != null) ? cached.nearestWarp : getNearestWarpInfo(shop);
+                    boolean isFav = false;
+
                     if (nearestWarpName != null
                             && !nearestWarpName.equals(configProvider.NO_WARP_NEAR_SHOP_ERROR_MSG)
                             && !nearestWarpName.equals(configProvider.NO_WG_REGION_NEAR_SHOP_ERROR_MSG)) {
-
                         isFav = fetchIsFavouriteSafe(viewer, nearestWarpName);
-                        // OPTIMIZATION: Fetch these once here, instead of during item render
-                        avgRating = PlayerWarpsPlugin.getWarpAverageRating(nearestWarpName);
-                        totalRatings = PlayerWarpsPlugin.getWarpTotalRatings(nearestWarpName);
                     }
 
-                    String ownerName = resolveOwnerName(shop.getShopOwner());
-                    int visitCount = ShopSearchActivityStorageUtil.getPlayerVisitCount(shop.getShopLocation());
+                    String ownerName = (cached != null) ? cached.ownerName : resolveOwnerName(shop.getShopOwner());
 
-                    // Update Cache
-                    menuDataCache.put(shop, new CachedShopData(nearestWarpName, isFav, ownerName, avgRating, totalRatings, visitCount));
-                    needsSort = true;
+                    // Mark with current timestamp so we know it's verified
+                    menuDataCache.put(shop, new CachedShopData(nearestWarpName, isFav, ownerName, System.currentTimeMillis()));
+                    cacheUpdated = true;
                 }
             }
 
-            if (needsSort || !hasBeenSorted) {
-                allShops.sort((s1, s2) -> {
+            if (cacheUpdated || !hasBeenSorted) {
+                shopsToSort.sort((s1, s2) -> {
                     CachedShopData c1 = menuDataCache.get(s1);
                     CachedShopData c2 = menuDataCache.get(s2);
+
                     boolean f1 = (c1 != null && c1.isFav);
                     boolean f2 = (c2 != null && c2.isFav);
-                    return Boolean.compare(f2, f1);
+
+                    // 1. Favorites always go first
+                    int favComp = Boolean.compare(f2, f1);
+                    if (favComp != 0) return favComp;
+
+                    // 2. If selling (/wts), sort by highest price.
+                    // If buying (/wtb), return 0 to preserve the random shuffle
+                    if (!isBuying) {
+                        return Double.compare(s2.getShopPrice(), s1.getShopPrice());
+                    }
+
+                    return 0;
                 });
 
                 hasBeenSorted = true;
 
                 Bukkit.getScheduler().runTask(FindItemAddOn.getInstance(), () -> {
                     if (viewer.getOpenInventory().getTopInventory().equals(inventory)) {
-                        setMenuItems(allShops);
+                        playerMenuUtility.setPlayerShopSearchResult(shopsToSort);
+                        setMenuItems(shopsToSort);
                     }
                 });
             }
         });
     }
 
-    private void loadPageDataAsync(List<FoundShopItemModel> pageItems, int startIndex) {
+    private void loadPageDataAsync(List<FoundShopItemModel> pageItems, int startIndex, int renderId) {
         Bukkit.getScheduler().runTaskAsynchronously(FindItemAddOn.getInstance(), () -> {
             boolean updateNeeded = false;
             for (FoundShopItemModel shop : pageItems) {
-                // If data is missing or partial, reload full stats
                 if (!menuDataCache.containsKey(shop)) {
                     String warp = getNearestWarpInfo(shop);
                     String owner = resolveOwnerName(shop.getShopOwner());
-
-                    double avg = -1;
-                    int total = 0;
-                    if (warp != null && !warp.equals(configProvider.NO_WARP_NEAR_SHOP_ERROR_MSG)) {
-                        avg = PlayerWarpsPlugin.getWarpAverageRating(warp);
-                        total = PlayerWarpsPlugin.getWarpTotalRatings(warp);
-                    }
-                    int visits = ShopSearchActivityStorageUtil.getPlayerVisitCount(shop.getShopLocation());
-
-                    menuDataCache.put(shop, new CachedShopData(warp, false, owner, avg, total, visits));
+                    // IMPORTANT: Use 0L timestamp to indicate "Placeholder / Untrusted"
+                    menuDataCache.put(shop, new CachedShopData(warp, false, owner, 0L));
                     updateNeeded = true;
                 }
             }
 
             if (updateNeeded) {
                 Bukkit.getScheduler().runTask(FindItemAddOn.getInstance(), () -> {
-                    if (playerMenuUtility.getOwner().getOpenInventory().getTopInventory() == inventory) {
+                    if (currentRenderId == renderId && playerMenuUtility.getOwner().getOpenInventory().getTopInventory() == inventory) {
                         renderItems(pageItems, startIndex, false);
                     }
                 });
@@ -379,7 +388,7 @@ public class FoundShopsMenu extends PaginatedMenu {
                 result.set(isFav);
                 latch.countDown();
             });
-            latch.await(1, TimeUnit.SECONDS);
+            latch.await(3, TimeUnit.SECONDS);
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
         } catch (Exception e) {
@@ -392,6 +401,8 @@ public class FoundShopsMenu extends PaginatedMenu {
     private void renderItems(List<FoundShopItemModel> pageItems, int startIndex, boolean usePartialData) {
         int shopItemSlot = 9;
 
+        currentPageShops.clear();
+
         for (int i = 9; i < 45; i++) {
             if (i >= 9 + pageItems.size()) {
                 inventory.setItem(i, new ItemStack(Material.AIR));
@@ -403,10 +414,13 @@ public class FoundShopsMenu extends PaginatedMenu {
 
             CachedShopData data = menuDataCache.get(foundShop);
 
-            // Pass the entire Data object to createShopItem now
-            ItemStack item = createShopItem(foundShop, data, usePartialData);
+            String cachedWarp = (data != null) ? data.nearestWarp : (usePartialData ? "Checking..." : null);
+            boolean cachedIsFav = (data != null) ? data.isFav : false;
+            String cachedOwner = (data != null) ? data.ownerName : (usePartialData ? "Loading..." : "Unknown");
 
-            if (data != null && data.isFav) {
+            ItemStack item = createShopItem(foundShop, cachedWarp, cachedIsFav, cachedOwner);
+
+            if (cachedIsFav) {
                 item = ensureFavouriteLoreAndGlow(item, true);
             }
 
@@ -419,9 +433,11 @@ public class FoundShopsMenu extends PaginatedMenu {
     private String resolveOwnerName(UUID ownerId) {
         if (ownerId == null) return "Admin";
         if (ownerNameCache.containsKey(ownerId)) return ownerNameCache.get(ownerId);
+
         String name = "Unknown";
         OfflinePlayer op = Bukkit.getOfflinePlayer(ownerId);
         if (op.getName() != null) name = op.getName();
+
         ownerNameCache.put(ownerId, name);
         return name;
     }
@@ -447,7 +463,7 @@ public class FoundShopsMenu extends PaginatedMenu {
         setButtonName(53, "&6Next » &7(" + nextPage + "/" + totalPages + ")");
     }
 
-    private @NotNull ItemStack createShopItem(@NotNull FoundShopItemModel foundShop, CachedShopData data, boolean usePartialData) {
+    private @NotNull ItemStack createShopItem(@NotNull FoundShopItemModel foundShop, String cachedWarp, boolean cachedIsFav, String cachedOwnerName) {
         ItemStack item = new ItemStack(foundShop.getItem().getType(), foundShop.getItem().getAmount());
         ItemMeta meta = foundShop.getItem().getItemMeta();
         if (meta == null) {
@@ -455,10 +471,9 @@ public class FoundShopsMenu extends PaginatedMenu {
         }
 
         List<String> lore = new ArrayList<>();
-        addItemLore(lore, foundShop, data, usePartialData);
+        addItemLore(lore, foundShop, cachedWarp, cachedIsFav, cachedOwnerName);
         meta.setLore(lore);
 
-        String cachedWarp = (data != null) ? data.nearestWarp : (usePartialData ? "Checking..." : null);
         setLocationData(meta, foundShop, cachedWarp);
 
         if (foundShop.getItem().getItemMeta().hasCustomModelData()) {
@@ -469,7 +484,7 @@ public class FoundShopsMenu extends PaginatedMenu {
         return item;
     }
 
-    private void addItemLore(List<String> lore, FoundShopItemModel foundShop, CachedShopData data, boolean usePartialData) {
+    private void addItemLore(List<String> lore, FoundShopItemModel foundShop, String cachedWarp, boolean cachedIsFav, String cachedOwnerName) {
         ItemMeta shopItemMeta = foundShop.getItem().getItemMeta();
         if (shopItemMeta != null && shopItemMeta.hasLore()) {
             for (String line : shopItemMeta.getLore()) {
@@ -486,12 +501,9 @@ public class FoundShopsMenu extends PaginatedMenu {
             loreTemplate = configProvider.SHOP_GUI_ITEM_LORE;
         }
 
-        boolean isFav = (data != null && data.isFav);
-        if (isFav && !hasFavouriteLore(lore)) {
-            lore.add(0, ColorTranslator.translateColorCodes("&6⭐ &7Favourite"));
+        if (cachedIsFav && !hasFavouriteLore(lore)) {
+            lore.add(0, ColorTranslator.translateColorCodes("&6⭐ &7Favourited Warp"));
         }
-
-        String cachedWarp = (data != null) ? data.nearestWarp : (usePartialData ? "Checking..." : null);
 
         for (String loreLine : loreTemplate) {
             String processed;
@@ -499,11 +511,11 @@ public class FoundShopsMenu extends PaginatedMenu {
                 String warpDisplay = (cachedWarp != null) ? cachedWarp : configProvider.NO_WARP_NEAR_SHOP_ERROR_MSG;
                 processed = loreLine.replace(ShopLorePlaceholdersEnum.NEAREST_WARP.value(), warpDisplay);
             } else {
-                processed = replaceLorePlaceholders(loreLine, foundShop, data, usePartialData);
+                processed = replaceLorePlaceholders(loreLine, foundShop, cachedWarp, cachedOwnerName);
             }
 
             if (processed.contains("{FAV_TOGGLE}") || processed.toLowerCase(Locale.ROOT).contains("(un)favourite")) {
-                String toggleWord = isFav ? "&cunfavourite" : "&afavourite";
+                String toggleWord = cachedIsFav ? "&cunfavourite" : "&afavourite";
                 processed = processed
                         .replace("{FAV_TOGGLE}", toggleWord)
                         .replace("(un)favourite", toggleWord);
@@ -602,7 +614,7 @@ public class FoundShopsMenu extends PaginatedMenu {
         meta.getPersistentDataContainer().set(key, PersistentDataType.STRING, locData);
     }
 
-    private @NotNull String replaceLorePlaceholders(String text, @NotNull FoundShopItemModel shop, CachedShopData data, boolean usePartialData) {
+    private @NotNull String replaceLorePlaceholders(String text, @NotNull FoundShopItemModel shop, String cachedWarp, String cachedOwnerName) {
         String result = text.replace(ShopLorePlaceholdersEnum.ITEM_PRICE.value(), formatNumber(shop.getShopPrice()));
 
         if (result.contains(ShopLorePlaceholdersEnum.SHOP_STOCK.value())) {
@@ -622,8 +634,7 @@ public class FoundShopsMenu extends PaginatedMenu {
                 String.valueOf(shop.getItem().getAmount()));
 
         if (result.contains(ShopLorePlaceholdersEnum.SHOP_OWNER.value())) {
-            String owner = (data != null) ? data.ownerName : (usePartialData ? "Loading..." : "Unknown");
-            result = result.replace(ShopLorePlaceholdersEnum.SHOP_OWNER.value(), owner);
+            result = result.replace(ShopLorePlaceholdersEnum.SHOP_OWNER.value(), cachedOwnerName);
         }
 
         if (result.contains(ShopLorePlaceholdersEnum.SHOP_LOCATION.value())) {
@@ -635,21 +646,36 @@ public class FoundShopsMenu extends PaginatedMenu {
         result = result.replace(ShopLorePlaceholdersEnum.SHOP_WORLD.value(),
                 Objects.requireNonNull(shop.getShopLocation().getWorld()).getName());
 
-        // OPTIMIZATION: Use pre-calculated visit count
-        int visits = (data != null) ? data.visitCount : 0;
-        // Fallback for partial data if strictly needed, though we usually default 0
-        if (data == null && !usePartialData) visits = ShopSearchActivityStorageUtil.getPlayerVisitCount(shop.getShopLocation());
+        // --- NEW PW API VISIT FETCHING ---
+        String visitsText = "0";
+        if (cachedWarp != null && !cachedWarp.equals(configProvider.NO_WARP_NEAR_SHOP_ERROR_MSG) && configProvider.NEAREST_WARP_MODE == 2) {
+            // Fetch directly from the PlayerWarps cached list to avoid async API callbacks inside the lore builder
+            Warp pwWarp = PlayerWarpsPlugin.getAllWarps().stream()
+                    .filter(w -> w.getWarpName().equalsIgnoreCase(cachedWarp))
+                    .findFirst()
+                    .orElse(null);
 
-        result = result.replace(ShopLorePlaceholdersEnum.SHOP_VISITS.value(), String.valueOf(visits));
+            if (pwWarp != null) {
+                // Gets the visit count straight from the PlayerWarps JSON data
+                visitsText = String.valueOf(pwWarp.getWarpVisit().getWarpVisits());
+            }
+        } else {
+            // Fallback to your internal tracker if PlayerWarps isn't being used
+            visitsText = String.valueOf(ShopSearchActivityStorageUtil.getPlayerVisitCount(shop.getShopLocation()));
+        }
+
+        result = result.replace(ShopLorePlaceholdersEnum.SHOP_VISITS.value(), visitsText);
 
         if (result.contains(ShopLorePlaceholdersEnum.WARP_AVG_RATING.value())
                 || result.contains(ShopLorePlaceholdersEnum.WARP_TOTAL_RATINGS.value())) {
+            String warpName = cachedWarp;
+            if (warpName == null && PlayerWarpsPlugin.getIsEnabled() && FindItemAddOn.getConfigProvider().NEAREST_WARP_MODE == 2) {
+                warpName = getNearestWarpInfo(shop);
+                if (warpName.equals(configProvider.NO_WARP_NEAR_SHOP_ERROR_MSG)) warpName = null;
+            }
 
-            // OPTIMIZATION: Use pre-calculated ratings from Data record
-            // This prevents calling the expensive DB methods every time lore renders
-            double avg = (data != null) ? data.avgRating : -1;
-            int total = (data != null) ? data.totalRatings : -1;
-
+            double avg = (warpName != null) ? PlayerWarpsPlugin.getWarpAverageRating(warpName) : -1;
+            int total = (warpName != null) ? PlayerWarpsPlugin.getWarpTotalRatings(warpName) : -1;
             String avgString = avg >= 0 ? String.format("%.2f", avg) : "N/A";
             String totalString = total >= 0 ? String.valueOf(total) : "N/A";
             result = result.replace(ShopLorePlaceholdersEnum.WARP_AVG_RATING.value(), avgString)
@@ -713,6 +739,7 @@ public class FoundShopsMenu extends PaginatedMenu {
                 && !PlayerPermsEnum.hasShopTpDelayBypassPermOrAdmin(player);
     }
 
+    // --- Navigation Handlers ---
     private void handleMenuClickForNavToNextPage(InventoryClickEvent event) {
         if (!((index + 1) >= super.playerMenuUtility.getPlayerShopSearchResult().size())) {
             page = page + 1;

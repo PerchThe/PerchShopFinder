@@ -1,7 +1,6 @@
 package me.perch.shopfinder.utils.warp;
 
 import com.olziedev.playerwarps.api.PlayerWarpsAPI;
-import com.olziedev.playerwarps.api.events.warp.PlayerWarpTeleportEvent;
 import com.olziedev.playerwarps.api.warp.Warp;
 import me.perch.shopfinder.dependencies.PlayerWarpsPlugin;
 import me.perch.shopfinder.FindItemAddOn;
@@ -32,8 +31,6 @@ public class PlayerWarpsUtil {
         double minDistanceSquared = 16384.0;
         Warp nearest = null;
 
-        // Optimization: Do NOT call getAllWarps() if we don't need to.
-        // (Assuming PlayerWarpsPlugin caches this, if not, this is where lag comes from)
         List<Warp> allWarps = PlayerWarpsPlugin.getAllWarps();
 
         double shopX = shopLocation.getX();
@@ -41,7 +38,6 @@ public class PlayerWarpsUtil {
         double shopZ = shopLocation.getZ();
 
         for (Warp warp : allWarps) {
-            // FIX: .getWorld() returns a String name, so we compare directly without .getName()
             if (warp.getWarpLocation().getWorld() == null || !warp.getWarpLocation().getWorld().equals(worldName)) {
                 continue;
             }
@@ -61,8 +57,6 @@ public class PlayerWarpsUtil {
                 continue;
             }
 
-            // Optimization: Fail-Fast Distance Check
-            // Check Axis distance before calculating full Square distance
             double dx = shopX - warp.getWarpLocation().getX();
             if (Math.abs(dx) > 128) continue; // Square root of 16384 is 128
 
@@ -86,7 +80,6 @@ public class PlayerWarpsUtil {
     }
 
     public static boolean isOwner(Player player, String warpName) {
-        // Optimization: Use stream().filter() but consider caching this if called often
         Warp warp = PlayerWarpsPlugin.getAllWarps().stream()
                 .filter(w -> w.getWarpName().equalsIgnoreCase(warpName))
                 .findFirst()
@@ -99,7 +92,15 @@ public class PlayerWarpsUtil {
         PlayerWarpsAPI.getInstance(api -> {
             Warp playerWarp = api.getPlayerWarp(warpName, player);
             if (playerWarp != null) {
-                playerWarp.getWarpLocation().teleportWarp(player, PlayerWarpTeleportEvent.Cause.PLAYER_WARP_MENU);
+
+                // Optional but recommended: Close the ShopFinder GUI before teleporting
+                // to prevent standard Bukkit inventory/teleport visual glitches.
+                player.closeInventory();
+
+                // Dispatches the native command, forcing the PlayerWarps plugin to handle
+                // ALL of its own internal tracking, including the visit counter.
+                player.performCommand("pw " + playerWarp.getWarpName());
+
             } else {
                 Logger.logError("&e" + player.getName() + " &cis trying to teleport to a PlayerWarp that does not exist!");
             }
